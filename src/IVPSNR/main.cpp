@@ -763,14 +763,14 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             flowPlaneOne.extend();
             flowPlaneTwo.extend();
 
-            IVPSNRFlowCheck = Processor.calcPicIVPSNR(&PictureP[0], &PictureP[1], true, &flowPlaneOne, &flowPlaneTwo);
+            IVPSNRFlowCheck = Processor.calcPicIVPSNRFlowCheck(&PictureP[0], &PictureP[1], &flowPlaneOne, &flowPlaneTwo);
             FrameIVPSNRFlowCheck[f] = IVPSNRFlowCheck; 
 
             PSNRFlow = Processor.calcPicPSNRFlow(&flowPlaneOne, &flowPlaneTwo);
             FramePSNRFlow[f] = PSNRFlow;
 
-            IVPSNRFlow = 0.0;
-            FrameIVPSNRFlow = IVPSNRFlow;
+            IVPSNRFlow = Processor.calcPicIVPSNRFlowUse(&PictureP[0], &PictureP[1], &flowPlaneOne, &flowPlaneTwo);
+            FrameIVPSNRFlow[f] = IVPSNRFlow;
 
         }
         
@@ -792,9 +792,11 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
         next[1].copyTo(prev[1]);*/
 
         if (VerboseLevel >= 2) {
-            fmt::printf("Frame %08d OpticalFlowAvg %8.4f", f, IVPSNRFlowCheck);
+            fmt::printf("Frame %08d IV-PSNR-Flow-Check %8.4f", f, IVPSNRFlowCheck);
             fmt::printf("\n");
-            fmt::printf("Frame %08d OpticalFlow %8.4f", f, PSNRFlow);
+            fmt::printf("Frame %08d PSNR-Flow %8.4f", f, PSNRFlow);
+            fmt::printf("\n");
+            fmt::printf("Frame %08d IV-PSNR-Flow %8.4f", f, IVPSNRFlow);
             fmt::printf("\n");
         }
     }
@@ -824,12 +826,14 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   flt64 SumIVPSNR = xPSNR::Accumulate(FrameIVPSNR);
   flt64 SumIVPSNRFlowCheck = xPSNR::Accumulate(FrameIVPSNRFlowCheck);
   flt64 Sum__PSNRFlow = xPSNR::Accumulate(FramePSNRFlow);
+  flt64 SumIVPSNRFlow = xPSNR::Accumulate(FrameIVPSNRFlow);
 
   flt64V4 Avg__PSNR = Sum__PSNR / NumFrames;
   flt64V4 AvgWSPSNR = SumWSPSNR / NumFrames;
   flt64   AvgIVPSNR = SumIVPSNR / NumFrames;
   flt64   AvgIVPSNRFlowCheck = SumIVPSNRFlowCheck / (NumFrames - 1);
   flt64   Avg__PSNRFlow = Sum__PSNRFlow / (NumFrames-1);
+  flt64   AvgIVPSNRFlow = SumIVPSNRFlow / (NumFrames - 1);
 
   tTimePoint  ProcessingEnd  = tClock::now();
 
@@ -852,9 +856,10 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
     if(Calc__PSNR)              { OutputStream << fmt::sprintf("PSNR%s   %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2]); }
     if(CalcWSPSNR)              { OutputStream << fmt::sprintf("WSPSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, AvgWSPSNR[0], AvgWSPSNR[1], AvgWSPSNR[2]); }
     if(CalcIVPSNR)              { OutputStream << fmt::sprintf("IVPSNR%s %8.4f dB                    \n", Suffix, AvgIVPSNR                               ); }
-    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("IV-PSNRCheck   %8.4f\n", AvgIVPSNRFlowCheck); }
-    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("PSNRFlow   %8.4f\n", Avg__PSNRFlow); }
-    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("PSNR plus Flow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
+    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("IVPSNRCheck%s   %8.4f\n",Suffix, AvgIVPSNRFlowCheck); }
+    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("PSNRFlow%s   %8.4f\n",Suffix, Avg__PSNRFlow); }
+    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("PSNRWFlow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
+    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("IVPSNRFlow%s %8.4f dB                \n", Suffix, AvgIVPSNRFlow); }
     OutputStream.close();
   }
 
@@ -863,11 +868,12 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   fmt::printf("\n\n");
   
   if(Calc__PSNR)           { fmt::printf("Average          PSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2]); }
-  if(CalcWSPSNR)           { fmt::printf("Average        WSPSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, AvgWSPSNR[0], AvgWSPSNR[1], AvgWSPSNR[2]); }
-  if(CalcIVPSNR)           { fmt::printf("Average        IVPSNR%s %8.4f dB                    \n", Suffix, AvgIVPSNR                               ); }
-  if (true/*CalcOptflow*/) { fmt::printf("Average          IV-PSNRCheck   %8.4f dB\n", AvgIVPSNRFlowCheck); }
-  if (true/*CalcOptflow*/) { fmt::printf("Average          PSNRFlow   %8.4f dB\n", Avg__PSNRFlow); }
-  if (true/*CalcOptflow*/) { fmt::printf("Average          PSNR plus Flow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
+  if(CalcWSPSNR)           { fmt::printf("Average          WSPSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, AvgWSPSNR[0], AvgWSPSNR[1], AvgWSPSNR[2]); }
+  if(CalcIVPSNR)           { fmt::printf("Average          IVPSNR%s %8.4f dB                    \n", Suffix, AvgIVPSNR                               ); }
+  if (true/*CalcOptflow*/) { fmt::printf("Average          IV-PSNRCheck%s   %8.4f dB\n",Suffix, AvgIVPSNRFlowCheck); }
+  if (true/*CalcOptflow*/) { fmt::printf("Average          PSNRFlow%s   %8.4f dB\n",Suffix, Avg__PSNRFlow); }
+  if (true/*CalcOptflow*/) { fmt::printf("Average          PSNRWFlow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
+  if (true/*CalcOptflow*/) { fmt::printf("Average          IVPSNRFlow%s %8.4f dB                \n", Suffix, AvgIVPSNRFlow); }
   fmt::printf("\n");
   if(AnyFake ) { fmt::printf("FakePSNR\n"); }
   if(AllExact) { fmt::printf("ExactSequences\n"); }

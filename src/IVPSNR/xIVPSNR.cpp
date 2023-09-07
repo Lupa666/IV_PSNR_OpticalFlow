@@ -38,6 +38,7 @@
 #include "xIVPSNR.h"
 #include "xPlane.h"
 #include "xDistortion.h"
+#include <iostream>
 #include <cassert>
 #include <numeric>
 
@@ -75,7 +76,7 @@ flt64 xIVPSNR::calcPicIVPSNR(const xPicP* Ref, const xPicP* Tst, const xPicI* Re
   return IVPSNR;
 }
 
-flt64 xIVPSNR::calcPicIVPSNR(const xPicP* Ref, const xPicP* Tst, bool fake, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+flt64 xIVPSNR::calcPicIVPSNRFlowCheck(const xPicP* Ref, const xPicP* Tst, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
 {
     assert(Ref != nullptr && Tst != nullptr);
     assert(Ref->isCompatible(Tst));
@@ -86,8 +87,31 @@ flt64 xIVPSNR::calcPicIVPSNR(const xPicP* Ref, const xPicP* Tst, bool fake, cons
     flt64 R2T = std::numeric_limits<flt64>::quiet_NaN();
     flt64 T2R = std::numeric_limits<flt64>::quiet_NaN();
 
-    R2T = xCalcQualAsymmetricPic(Ref, Tst, GlobalColorShiftRef2Tst, RefPlane, TstPlane);
-    T2R = xCalcQualAsymmetricPic(Tst, Ref, GlobalColorShiftTst2Ref, TstPlane, RefPlane);
+    R2T = xCalcQualAsymmetricPicFlowCheck(Ref, Tst, GlobalColorShiftRef2Tst, RefPlane, TstPlane);
+    T2R = xCalcQualAsymmetricPicFlowCheck(Tst, Ref, GlobalColorShiftTst2Ref, TstPlane, RefPlane);
+
+    flt64 IVPSNR = xMin(R2T, T2R);
+
+    if (m_DebugCallbackGCS) { m_DebugCallbackGCS(GlobalColorShiftRef2Tst); }
+    if (m_DebugCallbackQAP) { m_DebugCallbackQAP(R2T, T2R); }
+
+    return IVPSNR;
+}
+
+//TODO
+flt64 xIVPSNR::calcPicIVPSNRFlowUse(const xPicP* Ref, const xPicP* Tst, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+{
+    assert(Ref != nullptr && Tst != nullptr);
+    assert(Ref->isCompatible(Tst));
+
+    int32V4 GlobalColorShiftRef2Tst = xCalcGlobalColorShift(Ref, Tst, m_CmpUnntcbCoef, &m_ThreadPoolIf);
+    int32V4 GlobalColorShiftTst2Ref = -GlobalColorShiftRef2Tst;
+
+    flt64 R2T = std::numeric_limits<flt64>::quiet_NaN();
+    flt64 T2R = std::numeric_limits<flt64>::quiet_NaN();
+
+    R2T = xCalcQualAsymmetricPicFlow(Ref, Tst, GlobalColorShiftRef2Tst, RefPlane, TstPlane);
+    T2R = xCalcQualAsymmetricPicFlow(Tst, Ref, GlobalColorShiftTst2Ref, TstPlane, RefPlane);
 
     flt64 IVPSNR = xMin(R2T, T2R);
 
@@ -193,7 +217,7 @@ flt64 xIVPSNR::xCalcQualAsymmetricPic(const xPicP* Ref, const xPicP* Tst, const 
   const flt64   WeightedFrameQuality          = (FrameQuality * (flt64V4)CmpWeightsAverage).getSum() * ComponentWeightInvDenominator;
   return WeightedFrameQuality;
 }
-flt64 xIVPSNR::xCalcQualAsymmetricPic(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+flt64 xIVPSNR::xCalcQualAsymmetricPicFlowCheck(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
 {
     const int32 Height = Ref->getHeight();
     const int32 Area = Ref->getArea();
@@ -245,6 +269,65 @@ flt64 xIVPSNR::xCalcQualAsymmetricPic(const xPicP* Ref, const xPicP* Tst, const 
     const flt64   WeightedFrameQuality = (FrameQuality * (flt64V4)CmpWeightsAverage).getSum() * ComponentWeightInvDenominator;
     return WeightedFrameQuality;
 }
+
+
+flt64 xIVPSNR::xCalcQualAsymmetricPicFlow(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+{
+    const int32 Height = Ref->getHeight();
+    const int32 Area = Ref->getArea();
+
+    if (m_ThreadPoolIf.isActive())
+    {
+        for (int32 y = 0; y < Height; y++)
+        {
+            m_ThreadPoolIf.addWaitingTask(
+                [this, &Tst, &Ref, &GlobalColorShift, y, &RefPlane, &TstPlane](int32 /*ThreadIdx*/)
+                {
+                    const int32V4 RowDist = xCalcDistAsymmetricRow(Ref, Tst, y, GlobalColorShift, m_SearchRange, m_CmpWeightsSearch, RefPlane, TstPlane);
+                    for (int32 CmpIdx = 0; CmpIdx < 4; CmpIdx++) { m_RowDistortions[CmpIdx][y] = RowDist[CmpIdx]; }
+                });
+        }
+        m_ThreadPoolIf.waitUntilTasksFinished(Height);
+    }
+    else
+    {
+        for (int32 y = 0; y < Height; y++)
+        {
+            const int32V4 RowDist = xCalcDistAsymmetricRow(Ref, Tst, y, GlobalColorShift, m_SearchRange, m_CmpWeightsSearch, RefPlane, TstPlane);
+            for (int32 CmpIdx = 0; CmpIdx < 4; CmpIdx++) { m_RowDistortions[CmpIdx][y] = RowDist[CmpIdx]; }
+        }
+    }
+
+    flt64V4 FrameError = { 0, 0, 0, 0 };
+    if (m_UseWS)
+    {
+        for (int32 y = 0; y < Height; y++)
+        {
+            for (int32 CmpIdx = 0; CmpIdx < 4; CmpIdx++) { m_RowErrors[CmpIdx][y] = (flt64)(m_RowDistortions[CmpIdx][y]) * m_EquirectangularWeights[y]; }
+            //m_RowErrors[3][y] = (flt64)(m_RowDistortions[3][y]) * m_EquirectangularWeights[y];
+        }
+
+        for (uint32 CmpIdx = 0; CmpIdx < 4; CmpIdx++) { FrameError[CmpIdx] = Accumulate(m_RowErrors[CmpIdx]); }
+    }
+    else //!m_UseWS
+    {
+        for (int32 CmpIdx = 0; CmpIdx < 4; CmpIdx++) { FrameError[CmpIdx] = (flt64)std::accumulate(m_RowDistortions[CmpIdx].begin(), m_RowDistortions[CmpIdx].end(), (uint64)0); }
+        //FrameError[3] = /*ADD 4TH PART*/0;
+    }
+
+    flt64V4 FrameQuality = { 0, 0, 0, 0 };
+    flt64   PSNR_20logMAX = 20 * log10((1 << Ref->getBitDepth()) - 1);
+    flt64   PSNR_20logMAXFlow = 20 * log10(flt64_max);
+    for (int32 CmpIdx = 0; CmpIdx < 3; CmpIdx++) { FrameQuality[CmpIdx] = PSNR_20logMAX - 10 * log10((FrameError[CmpIdx]) / Area); }
+    FrameQuality[3] = PSNR_20logMAX - (10 * log10((FrameError[3]) / Area)); //flow
+
+    const int32V4 CmpWeightsAverage = c_UseRuntimeCmpWeights ? m_CmpWeightsAverage : c_DefaultCmpWeights;
+    const int32   SumCmpWeight = CmpWeightsAverage.getSum();
+    const flt64   ComponentWeightInvDenominator = 1.0 / (flt64)SumCmpWeight;
+    const flt64   WeightedFrameQuality = (FrameQuality * (flt64V4)CmpWeightsAverage).getSum() * ComponentWeightInvDenominator;
+    return WeightedFrameQuality;
+}
+
 int32V4 xIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, const int32 y, const int32V4& GlobalColorShift, const int32 SearchRange, const int32V4& CmpWeights)
 {
   const int32  Width     = Tst->getWidth();
@@ -303,6 +386,10 @@ int32V4 xIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, cons
             int32 Dist = xPow2(Diff);
             RowDist[CmpIdx] += Dist;
         }
+        const flt32V2* RefPlaneAddr = RefPlane->getAddr();
+        flt32V2 Diff = CurrTstPValue - (RefPlaneAddr[BestRefOffset]);
+        int32 Dist = (int32)xPow2(Diff[0] + Diff[1]);
+        RowDist[3] += Dist;
     }//x
 
     return RowDist;
