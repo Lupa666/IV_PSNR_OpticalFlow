@@ -121,6 +121,24 @@ flt64 xIVPSNR::calcPicIVPSNRFlowUse(const xPicP* Ref, const xPicP* Tst, const xP
     return IVPSNR;
 }
 
+flt64 xIVPSNR::calcPicIVPSNROnlyFlow(const xPlane<flt32V2>* Ref, const xPlane<flt32V2>* Tst)
+{
+    assert(Ref != nullptr && Tst != nullptr);
+    assert(Ref->isCompatible(Tst));
+
+    flt64 R2T = std::numeric_limits<flt64>::quiet_NaN();
+    flt64 T2R = std::numeric_limits<flt64>::quiet_NaN();
+
+    R2T = xCalcQualAsymmetricPicOnlyFlow(Ref, Tst);
+    T2R = xCalcQualAsymmetricPicOnlyFlow(Tst, Ref);
+
+    flt64 IVPSNR = xMin(R2T, T2R);
+
+    if (m_DebugCallbackQAP) { m_DebugCallbackQAP(R2T, T2R); }
+
+    return IVPSNR;
+}
+
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 // global color shift
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -317,7 +335,7 @@ flt64 xIVPSNR::xCalcQualAsymmetricPicFlow(const xPicP* Ref, const xPicP* Tst, co
 
     flt64V4 FrameQuality = { 0, 0, 0, 0 };
     flt64   PSNR_20logMAX = 20 * log10((1 << Ref->getBitDepth()) - 1);
-    flt64   PSNR_20logMAXFlow = 20 * log10(flt64_max);
+    //flt64   PSNR_20logMAXFlow = 20 * log10(flt64_max);
     for (int32 CmpIdx = 0; CmpIdx < 3; CmpIdx++) { FrameQuality[CmpIdx] = PSNR_20logMAX - 10 * log10((FrameError[CmpIdx]) / Area); }
     FrameQuality[3] = PSNR_20logMAX - (10 * log10((FrameError[3]) / Area)); //flow
 
@@ -326,6 +344,61 @@ flt64 xIVPSNR::xCalcQualAsymmetricPicFlow(const xPicP* Ref, const xPicP* Tst, co
     const flt64   ComponentWeightInvDenominator = 1.0 / (flt64)SumCmpWeight;
     const flt64   WeightedFrameQuality = (FrameQuality * (flt64V4)CmpWeightsAverage).getSum() * ComponentWeightInvDenominator;
     return WeightedFrameQuality;
+}
+
+flt64 xIVPSNR::xCalcQualAsymmetricPicOnlyFlow(const xPlane<flt32V2>* Ref, const xPlane<flt32V2>* Tst)
+{
+    const int32 Height = Ref->getHeight();
+    const int32 Area = Ref->getArea();
+
+    std::vector<flt64> RowDistortions(Height);
+
+    if (m_ThreadPoolIf.isActive())
+    {
+        for (int32 y = 0; y < Height; y++)
+        {
+            m_ThreadPoolIf.addWaitingTask(
+                [this, &Tst, &Ref, y, &RowDistortions](int32 /*ThreadIdx*/)
+                {
+                    const flt64 RowDist = xCalcDistAsymmetricRowOnlyFlow(Ref, Tst, y, m_SearchRange, m_CmpWeightsSearch);
+                    RowDistortions[y] = RowDist;
+                });
+        }
+        m_ThreadPoolIf.waitUntilTasksFinished(Height);
+    }
+    else
+    {
+        for (int32 y = 0; y < Height; y++)
+        {
+            const flt64 RowDist = (flt64)xCalcDistAsymmetricRowOnlyFlow(Ref, Tst, y, m_SearchRange, m_CmpWeightsSearch);
+            RowDistortions[y] = RowDist;
+        }
+    }
+
+    flt64 FrameError = 0;
+    if (m_UseWS)
+    {
+        for (int32 y = 0; y < Height; y++)
+        {
+            m_RowErrors[0][y] = (flt64)(m_RowDistortions[0][y]) * m_EquirectangularWeights[y];
+        }
+        FrameError = Accumulate(m_RowErrors[0]);
+    }
+    else //!m_UseWS
+    {
+        FrameError = (flt64)std::accumulate(m_RowDistortions[0].begin(), m_RowDistortions[0].end(), (uint64)0);
+    }
+
+    flt64 FrameQuality = 0;
+    flt64   PSNR_20logMAX = 20 * log10((1 << Ref->getBitDepth()) - 1);
+    //flt64   PSNR_20logMAXFlow = 20 * log10(flt64_max);
+    FrameQuality = PSNR_20logMAX - 10 * log10((FrameError) / Area);
+
+    //const int32V4 CmpWeightsAverage = c_UseRuntimeCmpWeights ? m_CmpWeightsAverage : c_DefaultCmpWeights;
+    //const int32   SumCmpWeight = CmpWeightsAverage.getSum();
+    //const flt64   ComponentWeightInvDenominator = 1.0 / (flt64)SumCmpWeight;
+    //const flt64   WeightedFrameQuality = (FrameQuality * (flt64V4)CmpWeightsAverage).getSum() * ComponentWeightInvDenominator;
+    return FrameQuality;
 }
 
 int32V4 xIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, const int32 y, const int32V4& GlobalColorShift, const int32 SearchRange, const int32V4& CmpWeights)
@@ -388,12 +461,63 @@ int32V4 xIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, cons
         }
         const flt32V2* RefPlaneAddr = RefPlane->getAddr();
         flt32V2 Diff = CurrTstPValue - (RefPlaneAddr[BestRefOffset]);
-        int32 Dist = (int32)xPow2(Diff[0] + Diff[1]);
+        int32 Dist = (int32)(xPow2(Diff[0]) + xPow2(Diff[1]));
         RowDist[3] += Dist;
     }//x
 
     return RowDist;
 }
+flt64 xIVPSNR::xCalcDistAsymmetricRowOnlyFlow(const xPlane<flt32V2>* Ref, const xPlane<flt32V2>* Tst, const int32 y, const int32 SearchRange, const int32V4& CmpWeights)
+{
+    const int32  Width = Tst->getWidth();
+    const int32  TstStride = Tst->getStride();
+    const int32  TstOffset = y * TstStride;
+
+    flt64 RowDist = 0.0;
+
+    const flt32V2* TstPtrY = Tst->getAddr() + TstOffset;
+
+    for (int32 x = 0; x < Width; x++)
+    {
+        const flt32V2 CurrTstValue = *(Tst->getAddr() + TstOffset);
+        const int32   BestRefOffset = xFindBestPixelWithinBlockOnlyFlow(Ref, CurrTstValue, x, y, SearchRange);
+
+        const flt32V2* RefAddr = Ref->getAddr();
+        flt32V2 Diff = CurrTstValue - (RefAddr[BestRefOffset]);
+        flt32 Dist = (flt32)(xPow2(Diff[0]) + xPow2(Diff[1]));
+        RowDist += Dist;
+    }//x
+
+    return RowDist;
+}
+int32 xIVPSNR::xFindBestPixelWithinBlockOnlyFlow(const xPlane<flt32V2>* Ref, const flt32V2& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange) {
+
+    const int32 BegY = CenterY - SearchRange;
+    const int32 EndY = CenterY + SearchRange;
+    const int32 BegX = CenterX - SearchRange;
+    const int32 EndX = CenterX + SearchRange;
+
+    const flt32V2* RefPtr = Ref->getAddr();
+    const int32  Stride = Ref->getStride();
+
+
+    int32 BestError = std::numeric_limits<int32>::max();
+    int32 BestOffset = NOT_VALID;
+
+    for (int32 y = BegY; y <= EndY; y++)
+    {
+        for (int32 x = BegX; x <= EndX; x++)
+        {
+            const int32 Offset = y * Stride + x;
+            const flt32 Dist = xPow2(TstPel[0] - RefPtr[Offset][0]) + xPow2(TstPel[1] - RefPtr[Offset][1]);
+            const flt32 Error = Dist;
+            if (Error < BestError) { BestError = Error; BestOffset = Offset; }
+        } //x
+    } //y
+
+    return BestOffset;
+}
+
 int32 xIVPSNR::xFindBestPixelWithinBlock(const xPicP* Ref, const int32V4& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange, const int32V4& CmpWeights)
 {
   const int32 BegY = CenterY - SearchRange;

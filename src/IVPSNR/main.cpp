@@ -591,6 +591,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   std::vector<flt64> FrameIVPSNRFlowCheck(NumFrames);
   std::vector<flt64> FramePSNRFlow(NumFrames);
   std::vector<flt64> FrameIVPSNRFlow(NumFrames);
+  std::vector<flt64> FrameIVPSNROnlyFlow(NumFrames);
 
   bool AllExact = true;
   bool AnyFake  = false;
@@ -733,6 +734,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
         flt64 IVPSNRFlowCheck = 0.0;
         flt64 PSNRFlow = 0.0;
         flt64 IVPSNRFlow = 0.0;
+        flt64 IVPSNROnlyFlow = 0.0;
         xPlane<flt32V2>flowPlaneOne(PictureSize, BitDepth, PictureMargin);
         xPlane<flt32V2>flowPlaneTwo(PictureSize, BitDepth, PictureMargin);
         if (f == 0) {
@@ -748,6 +750,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             FrameIVPSNRFlowCheck[f] = 0.0;
             FramePSNRFlow[f] = 0.0;
             FrameIVPSNRFlow[f] = 0.0;
+            FrameIVPSNROnlyFlow[f] = 0.0;
         }
         else {
             xPic2Mat(PictureP[0], next[0], 1);
@@ -772,6 +775,8 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             IVPSNRFlow = Processor.calcPicIVPSNRFlowUse(&PictureP[0], &PictureP[1], &flowPlaneOne, &flowPlaneTwo);
             FrameIVPSNRFlow[f] = IVPSNRFlow;
 
+            IVPSNROnlyFlow = Processor.calcPicIVPSNROnlyFlow(&flowPlaneOne, &flowPlaneTwo);
+            FrameIVPSNROnlyFlow[f] = IVPSNROnlyFlow;
         }
         
         /*cv::Mat subtracted;
@@ -797,6 +802,8 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             fmt::printf("Frame %08d PSNR-Flow %8.4f", f, PSNRFlow);
             fmt::printf("\n");
             fmt::printf("Frame %08d IV-PSNR-Flow %8.4f", f, IVPSNRFlow);
+            fmt::printf("\n");
+            fmt::printf("Frame %08d IV-PSNR-Only-Flow %8.4f", f, IVPSNROnlyFlow);
             fmt::printf("\n");
         }
     }
@@ -827,6 +834,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   flt64 SumIVPSNRFlowCheck = xPSNR::Accumulate(FrameIVPSNRFlowCheck);
   flt64 Sum__PSNRFlow = xPSNR::Accumulate(FramePSNRFlow);
   flt64 SumIVPSNRFlow = xPSNR::Accumulate(FrameIVPSNRFlow);
+  flt64 SumIVPSNROnlyFlow = xPSNR::Accumulate(FrameIVPSNROnlyFlow);
 
   flt64V4 Avg__PSNR = Sum__PSNR / NumFrames;
   flt64V4 AvgWSPSNR = SumWSPSNR / NumFrames;
@@ -834,6 +842,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   flt64   AvgIVPSNRFlowCheck = SumIVPSNRFlowCheck / (NumFrames - 1);
   flt64   Avg__PSNRFlow = Sum__PSNRFlow / (NumFrames-1);
   flt64   AvgIVPSNRFlow = SumIVPSNRFlow / (NumFrames - 1);
+  flt64   AvgIVPSNROnlyFlow = SumIVPSNROnlyFlow / (NumFrames - 1);
 
   tTimePoint  ProcessingEnd  = tClock::now();
 
@@ -860,6 +869,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
     if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("PSNRFlow%s   %8.4f\n",Suffix, Avg__PSNRFlow); }
     if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("PSNRWFlow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
     if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("IVPSNRFlow%s %8.4f dB                \n", Suffix, AvgIVPSNRFlow); }
+    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("IVPSNROnlyFlow%s %8.4f dB                \n", Suffix, AvgIVPSNROnlyFlow); }
     OutputStream.close();
   }
 
@@ -874,6 +884,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   if (true/*CalcOptflow*/) { fmt::printf("Average          PSNRFlow%s   %8.4f dB\n",Suffix, Avg__PSNRFlow); }
   if (true/*CalcOptflow*/) { fmt::printf("Average          PSNRWFlow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
   if (true/*CalcOptflow*/) { fmt::printf("Average          IVPSNRFlow%s %8.4f dB                \n", Suffix, AvgIVPSNRFlow); }
+  if (true/*CalcOptflow*/) { fmt::printf("Average          IVPSNROnlyFlow%s %8.4f dB                \n", Suffix, AvgIVPSNROnlyFlow); }
   fmt::printf("\n");
   if(AnyFake ) { fmt::printf("FakePSNR\n"); }
   if(AllExact) { fmt::printf("ExactSequences\n"); }

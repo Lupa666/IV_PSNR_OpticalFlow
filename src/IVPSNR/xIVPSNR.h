@@ -83,6 +83,7 @@ public:
   flt64 calcPicIVPSNR  (const xPicP* Ref, const xPicP* Tst, const xPicI* RefI = nullptr, const xPicI* TstI = nullptr);
   flt64 calcPicIVPSNRFlowCheck(const xPicP* Ref, const xPicP* Tst, const xPlane<flt32V2>* RefPlane = nullptr, const xPlane<flt32V2>* TstPlane = nullptr);
   flt64 calcPicIVPSNRFlowUse(const xPicP* Ref, const xPicP* Tst, const xPlane<flt32V2>* RefPlane = nullptr, const xPlane<flt32V2>* TstPlane = nullptr);
+  flt64 calcPicIVPSNROnlyFlow(const xPlane<flt32V2>* Ref, const xPlane<flt32V2>* Tst);
 
 protected:
   //global color shift
@@ -93,10 +94,13 @@ protected:
   flt64          xCalcQualAsymmetricPic					(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift);
   flt64          xCalcQualAsymmetricPicFlowCheck		(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane);
   flt64          xCalcQualAsymmetricPicFlow				(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane);
+  flt64          xCalcQualAsymmetricPicOnlyFlow			(const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane);
   static int32V4 xCalcDistAsymmetricRow					(const xPicP* Ref, const xPicP* Tst, const int32 y, const int32V4& GlobalColorShift, const int32 SearchRange, const int32V4& CmpWeights);
   static int32V4 xCalcDistAsymmetricRow					(const xPicP* Ref, const xPicP* Tst, const int32 y, const int32V4& GlobalColorShift, const int32 SearchRange, const int32V4& CmpWeights, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane); // TODO: FINISH
-  static int32   xFindBestPixelWithinBlock				(const xPicP* Ref, const int32V4& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange, const int32V4& CmpWeights);
+  static flt64   xCalcDistAsymmetricRowOnlyFlow			(const xPlane<flt32V2>* Ref, const xPlane<flt32V2>* Tst, const int32 y, const int32 SearchRange, const int32V4& CmpWeights); // TODO: FINISH
+  static int32   xFindBestPixelWithinBlockOnlyFlow		(const xPlane<flt32V2>* Ref, const flt32V2& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange);
   static int32   xFindBestPixelWithinBlock				(const xPicP* Ref, const int32V4& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange, const int32V4& CmpWeights, const xPlane<flt32V2>* RefPlane, const flt32V2& TstPos); // TODO: FINISH
+  static int32   xFindBestPixelWithinBlock				(const xPicP* Ref, const int32V4& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange, const int32V4& CmpWeights);
   
   //asymetric Q interleaved
   flt64          xCalcQualAsymmetricPic   (const xPicI* Ref, const xPicI* Tst, const int32V4& GlobalColorShift);
