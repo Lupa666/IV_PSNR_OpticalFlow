@@ -753,13 +753,25 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             FrameIVPSNROnlyFlow[f] = 0.0;
         }
         else {
-            xPic2Mat(PictureP[0], next[0], 1);
-            xPic2Mat(PictureP[1], next[1], 1);
+
             cv::Mat flow[2];
-            flow[0] = (prev[0].size(), CV_32FC2);
-            flow[1] = (prev[1].size(), CV_32FC2);
-            calcOpticalFlowFarneback(prev[0], next[0], flow[0], 0.5, 3, 15, 3, 5, 1.2, 0);
-            calcOpticalFlowFarneback(prev[1], next[1], flow[1], 0.5, 3, 15, 3, 5, 1.2, 0);
+            if (ThreadPoolIf.isActive())
+            {
+                for (int32 i = 0; i < 2; i++) { ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, i](int32 /*ThreadIdx*/) { 
+                    xPic2Mat(PictureP[i], next[i], 1);
+                    flow[i] = (prev[i].size(), CV_32FC2);
+                    calcOpticalFlowFarneback(prev[i], next[i], flow[i], 0.5, 3, 15, 3, 5, 1.2, 0); 
+                    }); }
+                ThreadPoolIf.waitUntilTasksFinished(2);
+            }
+            else
+            {
+                for (int32 i = 0; i < 2; i++) { 
+                    xPic2Mat(PictureP[i], next[i], 1);
+                    flow[i] = (prev[i].size(), CV_32FC2);
+                    calcOpticalFlowFarneback(prev[i], next[i], flow[i], 0.5, 3, 15, 3, 5, 1.2, 0); 
+                }
+            }
 
             Mat2xPlane(flow[0], flowPlaneOne);
             Mat2xPlane(flow[1], flowPlaneTwo);
