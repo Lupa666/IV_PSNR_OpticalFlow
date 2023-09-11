@@ -57,7 +57,7 @@ public:
   //IVPSNR params
   static constexpr bool    c_UseRuntimeCmpWeights = xc_USE_RUNTIME_CMPWEIGHTS;
   static constexpr int32   c_DefaultSearchRange   = 2;
-  static constexpr int32V4 c_DefaultCmpWeights    = { 4, 1, 1, 2 };
+  static constexpr int32V4 c_DefaultCmpWeights    = { 4, 1, 1, 1 };
   static constexpr flt32V4 c_DefaultUnntcbCoef    = { 0.01f, 0.01f, 0.01f, 0.0f };
   //debug calback types
   using tDCfGCS = std::function<void(const int32V4&)>;
