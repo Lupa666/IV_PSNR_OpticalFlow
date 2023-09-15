@@ -70,6 +70,7 @@ set(LIB_FMT_LOCATION "src/lib_fmt")
 set(LIB_PMBB_NAME "lib_pmbb")
 set(LIB_PMBB_LOCATION "src/lib_pmbb")
 set(LIB_PMBB_SOURCES
+  ${LIB_PMBB_LOCATION}/xUtilsOCV.h     ${LIB_PMBB_LOCATION}/xUtilsOCV.cpp
   ${LIB_PMBB_LOCATION}/xCommonDefPMBB.h
   ${LIB_PMBB_LOCATION}/xVec.h
   ${LIB_PMBB_LOCATION}/xFile.h
@@ -89,6 +90,7 @@ set(LIB_PMBB_SOURCES
   ${LIB_PMBB_LOCATION}/xDistortionSSE.h  ${LIB_PMBB_LOCATION}/xDistortionSSE.cpp
   ${LIB_PMBB_LOCATION}/xDistortionAVX.h  ${LIB_PMBB_LOCATION}/xDistortionAVX.cpp
   ${LIB_PMBB_LOCATION}/xMathUtils.h      ${LIB_PMBB_LOCATION}/xMathUtils.cpp
+  ${LIB_PMBB_LOCATION}/xPlane.h          ${LIB_PMBB_LOCATION}/xPlane.cpp
 )
 source_group("Source Files" FILES ${LIB_PMBB_SOURCES})
 add_library(${LIB_PMBB_NAME} ${LIB_PMBB_SOURCES})
@@ -102,7 +104,6 @@ set(PROJECT_SOURCES
   ${PROJECT_LOCATION}/xCommonDefIVPSNR.h
   ${PROJECT_LOCATION}/xPSNR.h      ${PROJECT_LOCATION}/xPSNR.cpp
   ${PROJECT_LOCATION}/xWSPSNR.h    ${PROJECT_LOCATION}/xWSPSNR.cpp
-  ${PROJECT_LOCATION}/xPlane.h     ${PROJECT_LOCATION}/xPlane.cpp
   ${PROJECT_LOCATION}/xIVPSNR.h    ${PROJECT_LOCATION}/xIVPSNR.cpp ${PROJECT_LOCATION}/xIVPSNRM.cpp
   ${PROJECT_LOCATION}/main.cpp
 )

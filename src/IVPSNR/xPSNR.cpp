@@ -73,7 +73,7 @@ xPSNR::tRes4 xPSNR::calcPicPSNR(const xPicP* Tst, const xPicP* Ref)
 
   return std::make_tuple(PSNR, Exact);
 }
-flt64 xPSNR::calcPicPSNRFlow(const xPlane<flt32V2>* Tst, const xPlane<flt32V2>* Ref)
+flt64 xPSNR::calcPicPSNRFlow(const tFlowPlane* Tst, const tFlowPlane* Ref)
 {
     assert(Ref != nullptr && Tst != nullptr);
     assert(Ref->isCompatible(Tst));
@@ -155,7 +155,7 @@ xPSNR::tRes1 xPSNR::xCalcCmpPSNR(const xPicP* Tst, const xPicP* Ref, eCmp CmpId)
 
   return std::make_tuple(PSNR, Exact);
 }
-flt64 xPSNR::xCalcCmpPSNRFlow(const xPlane<flt32V2>* Tst, const xPlane<flt32V2>* Ref)
+flt64 xPSNR::xCalcCmpPSNRFlow(const tFlowPlane* Tst, const tFlowPlane* Ref)
 {
     const int32   Width = Ref->getWidth();
     const int32   Height = Ref->getHeight();

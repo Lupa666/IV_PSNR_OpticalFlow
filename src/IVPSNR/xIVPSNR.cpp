@@ -76,7 +76,11 @@ flt64 xIVPSNR::calcPicIVPSNR(const xPicP* Ref, const xPicP* Tst, const xPicI* Re
   return IVPSNR;
 }
 
-flt64 xIVPSNR::calcPicIVPSNRFlowCheck(const xPicP* Ref, const xPicP* Tst, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+//===============================================================================================================================================================================================================
+// xTIVPSNR
+//===============================================================================================================================================================================================================
+
+flt64 xTIVPSNR::calcPicIVPSNRFlowCheck(const xPicP* Ref, const xPicP* Tst, const tFlowPlane* RefPlane, const tFlowPlane* TstPlane)
 {
     assert(Ref != nullptr && Tst != nullptr);
     assert(Ref->isCompatible(Tst));
@@ -98,8 +102,7 @@ flt64 xIVPSNR::calcPicIVPSNRFlowCheck(const xPicP* Ref, const xPicP* Tst, const 
     return IVPSNR;
 }
 
-//TODO
-flt64 xIVPSNR::calcPicIVPSNRFlowUse(const xPicP* Ref, const xPicP* Tst, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+flt64 xTIVPSNR::calcPicIVPSNRFlowUse(const xPicP* Ref, const xPicP* Tst, const tFlowPlane* RefPlane, const tFlowPlane* TstPlane)
 {
     assert(Ref != nullptr && Tst != nullptr);
     assert(Ref->isCompatible(Tst));
@@ -121,7 +124,7 @@ flt64 xIVPSNR::calcPicIVPSNRFlowUse(const xPicP* Ref, const xPicP* Tst, const xP
     return IVPSNR;
 }
 
-flt64 xIVPSNR::calcPicIVPSNROnlyFlow(const xPlane<flt32V2>* Ref, const xPlane<flt32V2>* Tst)
+flt64 xTIVPSNR::calcPicIVPSNROnlyFlow(const tFlowPlane* Ref, const tFlowPlane* Tst)
 {
     assert(Ref != nullptr && Tst != nullptr);
     assert(Ref->isCompatible(Tst));
@@ -235,7 +238,81 @@ flt64 xIVPSNR::xCalcQualAsymmetricPic(const xPicP* Ref, const xPicP* Tst, const 
   const flt64   WeightedFrameQuality          = (FrameQuality * (flt64V4)CmpWeightsAverage).getSum() * ComponentWeightInvDenominator;
   return WeightedFrameQuality;
 }
-flt64 xIVPSNR::xCalcQualAsymmetricPicFlowCheck(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+int32 xIVPSNR::xFindBestPixelWithinBlock(const xPicP* Ref, const int32V4& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange, const int32V4& CmpWeights)
+{
+    const int32 BegY = CenterY - SearchRange;
+    const int32 EndY = CenterY + SearchRange;
+    const int32 BegX = CenterX - SearchRange;
+    const int32 EndX = CenterX + SearchRange;
+
+    const uint16* RefPtrY = Ref->getAddr(eCmp::LM);
+    const uint16* RefPtrU = Ref->getAddr(eCmp::CB);
+    const uint16* RefPtrV = Ref->getAddr(eCmp::CR);
+    const int32   Stride = Ref->getStride();
+
+
+    int32 BestError = std::numeric_limits<int32>::max();
+    int32 BestOffset = NOT_VALID;
+
+    for (int32 y = BegY; y <= EndY; y++)
+    {
+        for (int32 x = BegX; x <= EndX; x++)
+        {
+            const int32 Offset = y * Stride + x;
+            const int32 DistY = xPow2(TstPel[0] - (int32)(RefPtrY[Offset]));
+            const int32 DistU = xPow2(TstPel[1] - (int32)(RefPtrU[Offset]));
+            const int32 DistV = xPow2(TstPel[2] - (int32)(RefPtrV[Offset]));
+            if constexpr (c_UseRuntimeCmpWeights)
+            {
+                const int32 Error = DistY * CmpWeights[0] + DistU * CmpWeights[1] + DistV * CmpWeights[2];
+                if (Error < BestError) { BestError = Error; BestOffset = Offset; }
+            }
+            else
+            {
+                const int32 Error = (DistY << 2) + DistU + DistV;
+                if (Error < BestError) { BestError = Error; BestOffset = Offset; }
+            }
+        } //x
+    } //y
+
+    return BestOffset;
+}
+int32V4 xIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, const int32 y, const int32V4& GlobalColorShift, const int32 SearchRange, const int32V4& CmpWeights)
+{
+    const int32  Width = Tst->getWidth();
+    const int32  TstStride = Tst->getStride();
+    const int32  TstOffset = y * TstStride;
+
+    int32V4 RowDist = { 0, 0, 0, 0 };
+
+    const uint16* TstPtrY = Tst->getAddr(eCmp::LM) + TstOffset;
+    const uint16* TstPtrU = Tst->getAddr(eCmp::CB) + TstOffset;
+    const uint16* TstPtrV = Tst->getAddr(eCmp::CR) + TstOffset;
+
+    //TODO: get the point
+
+    for (int32 x = 0; x < Width; x++)
+    {
+        const int32V4 CurrTstValue = int32V4((int32)(TstPtrY[x]), (int32)(TstPtrU[x]), (int32)(TstPtrV[x]), 0) + GlobalColorShift;
+        //flt32V2 CurrTstPlane = flt32V2(PlaneTst);
+        const int32   BestRefOffset = xFindBestPixelWithinBlock(Ref, CurrTstValue, x, y, SearchRange, CmpWeights);
+
+        for (uint32 CmpIdx = 0; CmpIdx < 3; CmpIdx++)
+        {
+            const uint16* RefAddr = Ref->getAddr((eCmp)CmpIdx);
+            int32 Diff = CurrTstValue[CmpIdx] - (int32)(RefAddr[BestRefOffset]);
+            int32 Dist = xPow2(Diff);
+            RowDist[CmpIdx] += Dist;
+        }
+    }//x
+
+    return RowDist;
+}
+
+//===============================================================================================================================================================================================================
+// xTIVPSNR - asymetric Q planar
+//===============================================================================================================================================================================================================
+flt64 xTIVPSNR::xCalcQualAsymmetricPicFlowCheck(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const tFlowPlane* RefPlane, const tFlowPlane* TstPlane)
 {
     const int32 Height = Ref->getHeight();
     const int32 Area = Ref->getArea();
@@ -287,9 +364,7 @@ flt64 xIVPSNR::xCalcQualAsymmetricPicFlowCheck(const xPicP* Ref, const xPicP* Ts
     const flt64   WeightedFrameQuality = (FrameQuality * (flt64V4)CmpWeightsAverage).getSum() * ComponentWeightInvDenominator;
     return WeightedFrameQuality;
 }
-
-
-flt64 xIVPSNR::xCalcQualAsymmetricPicFlow(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+flt64 xTIVPSNR::xCalcQualAsymmetricPicFlow(const xPicP* Ref, const xPicP* Tst, const int32V4& GlobalColorShift, const tFlowPlane* RefPlane, const tFlowPlane* TstPlane)
 {
     const int32 Height = Ref->getHeight();
     const int32 Area = Ref->getArea();
@@ -345,8 +420,7 @@ flt64 xIVPSNR::xCalcQualAsymmetricPicFlow(const xPicP* Ref, const xPicP* Tst, co
     const flt64   WeightedFrameQuality = (FrameQuality * (flt64V4)CmpWeightsAverage).getSum() * ComponentWeightInvDenominator;
     return WeightedFrameQuality;
 }
-
-flt64 xIVPSNR::xCalcQualAsymmetricPicOnlyFlow(const xPlane<flt32V2>* Ref, const xPlane<flt32V2>* Tst)
+flt64 xTIVPSNR::xCalcQualAsymmetricPicOnlyFlow(const tFlowPlane* Ref, const tFlowPlane* Tst)
 {
     const int32 Height = Ref->getHeight();
     const int32 Area = Ref->getArea();
@@ -401,40 +475,7 @@ flt64 xIVPSNR::xCalcQualAsymmetricPicOnlyFlow(const xPlane<flt32V2>* Ref, const 
     return FrameQuality;
 }
 
-int32V4 xIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, const int32 y, const int32V4& GlobalColorShift, const int32 SearchRange, const int32V4& CmpWeights)
-{
-  const int32  Width     = Tst->getWidth();
-  const int32  TstStride = Tst->getStride();
-  const int32  TstOffset = y * TstStride;
-
-  int32V4 RowDist = { 0, 0, 0, 0 };
-
-  const uint16* TstPtrY = Tst->getAddr(eCmp::LM) + TstOffset;
-  const uint16* TstPtrU = Tst->getAddr(eCmp::CB) + TstOffset;
-  const uint16* TstPtrV = Tst->getAddr(eCmp::CR) + TstOffset;
-
-  //TODO: get the point
-
-  for(int32 x = 0; x < Width; x++)
-  {
-    const int32V4 CurrTstValue  = int32V4((int32)(TstPtrY[x]), (int32)(TstPtrU[x]), (int32)(TstPtrV[x]), 0) + GlobalColorShift;
-    //flt32V2 CurrTstPlane = flt32V2(PlaneTst);
-    const int32   BestRefOffset = xFindBestPixelWithinBlock(Ref, CurrTstValue, x, y, SearchRange, CmpWeights);
-
-    for(uint32 CmpIdx = 0; CmpIdx < 3; CmpIdx++)
-    {
-      const uint16* RefAddr = Ref->getAddr((eCmp)CmpIdx);
-      int32 Diff = CurrTstValue[CmpIdx] - (int32)(RefAddr[BestRefOffset]);
-      int32 Dist = xPow2(Diff);
-      RowDist[CmpIdx] += Dist;
-    }
-  }//x
-
-  return RowDist;
-}
-
-//USING OPTICAL FLOW
-int32V4 xIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, const int32 y, const int32V4& GlobalColorShift, const int32 SearchRange, const int32V4& CmpWeights, const xPlane<flt32V2>* RefPlane, const xPlane<flt32V2>* TstPlane)
+int32V4 xTIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, const int32 y, const int32V4& GlobalColorShift, const int32 SearchRange, const int32V4& CmpWeights, const tFlowPlane* RefPlane, const tFlowPlane* TstPlane)
 {
     const int32  Width = Tst->getWidth();
     const int32  TstStride = Tst->getStride();
@@ -461,13 +502,13 @@ int32V4 xIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, cons
         }
         const flt32V2* RefPlaneAddr = RefPlane->getAddr();
         flt32V2 Diff = CurrTstPValue - (RefPlaneAddr[BestRefOffset]);
-        int32 Dist = (int32)(xPow2(Diff[0]) + xPow2(Diff[1]));
+        int32 Dist = (int32)xRoundFlt64ToInt32(xPow2(Diff[0]) + xPow2(Diff[1]));
         RowDist[3] += Dist;
     }//x
 
     return RowDist;
 }
-flt64 xIVPSNR::xCalcDistAsymmetricRowOnlyFlow(const xPlane<flt32V2>* Ref, const xPlane<flt32V2>* Tst, const int32 y, const int32 SearchRange, const int32V4& CmpWeights)
+flt64 xTIVPSNR::xCalcDistAsymmetricRowOnlyFlow(const tFlowPlane* Ref, const tFlowPlane* Tst, const int32 y, const int32 SearchRange, const int32V4& CmpWeights)
 {
     const int32  Width = Tst->getWidth();
     const int32  TstStride = Tst->getStride();
@@ -490,7 +531,7 @@ flt64 xIVPSNR::xCalcDistAsymmetricRowOnlyFlow(const xPlane<flt32V2>* Ref, const 
 
     return RowDist;
 }
-int32 xIVPSNR::xFindBestPixelWithinBlockOnlyFlow(const xPlane<flt32V2>* Ref, const flt32V2& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange) {
+int32 xTIVPSNR::xFindBestPixelWithinBlockOnlyFlow(const tFlowPlane* Ref, const flt32V2& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange) {
 
     const int32 BegY = CenterY - SearchRange;
     const int32 EndY = CenterY + SearchRange;
@@ -518,48 +559,7 @@ int32 xIVPSNR::xFindBestPixelWithinBlockOnlyFlow(const xPlane<flt32V2>* Ref, con
     return BestOffset;
 }
 
-int32 xIVPSNR::xFindBestPixelWithinBlock(const xPicP* Ref, const int32V4& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange, const int32V4& CmpWeights)
-{
-  const int32 BegY = CenterY - SearchRange;
-  const int32 EndY = CenterY + SearchRange;
-  const int32 BegX = CenterX - SearchRange;
-  const int32 EndX = CenterX + SearchRange;
-
-  const uint16* RefPtrY = Ref->getAddr  (eCmp::LM);
-  const uint16* RefPtrU = Ref->getAddr  (eCmp::CB);
-  const uint16* RefPtrV = Ref->getAddr  (eCmp::CR);
-  const int32   Stride  = Ref->getStride();
-
-
-  int32 BestError  = std::numeric_limits<int32>::max();
-  int32 BestOffset = NOT_VALID;
-
-  for(int32 y = BegY; y <= EndY; y++)
-  {
-    for(int32 x = BegX; x <= EndX; x++)
-    {
-      const int32 Offset = y * Stride + x;
-      const int32 DistY  = xPow2(TstPel[0] - (int32)(RefPtrY[Offset]));
-      const int32 DistU  = xPow2(TstPel[1] - (int32)(RefPtrU[Offset]));
-      const int32 DistV  = xPow2(TstPel[2] - (int32)(RefPtrV[Offset]));
-      if constexpr (c_UseRuntimeCmpWeights)
-      {
-        const int32 Error = DistY * CmpWeights[0] + DistU * CmpWeights[1] + DistV * CmpWeights[2];
-        if(Error < BestError) { BestError = Error; BestOffset = Offset; }
-      }
-      else
-      {
-        const int32 Error = (DistY << 2) + DistU + DistV;
-        if (Error < BestError) { BestError = Error; BestOffset = Offset; }
-      }
-    } //x
-  } //y
-
-  return BestOffset;
-}
-
-//USING OPTICAL FLOW
-int32 xIVPSNR::xFindBestPixelWithinBlock(const xPicP* Ref, const int32V4& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange, const int32V4& CmpWeights, const xPlane<flt32V2>* RefPlane, const flt32V2& TstPos)
+int32 xTIVPSNR::xFindBestPixelWithinBlock(const xPicP* Ref, const int32V4& TstPel, const int32 CenterX, const int32 CenterY, const int32 SearchRange, const int32V4& CmpWeights, const tFlowPlane* RefPlane, const flt32V2& TstPos)
 {
     const int32 BegY = CenterY - SearchRange;
     const int32 EndY = CenterY + SearchRange;

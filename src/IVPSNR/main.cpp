@@ -42,6 +42,7 @@
 #include "xIVPSNR.h"
 #include "xCfgINI.h"
 #include "xPlane.h"
+#include "xUtilsOCV.h"
 #include <math.h>
 #include <fstream>
 #include <time.h>
@@ -151,124 +152,6 @@ Example - config file:
 
 =============================================================================
 )AVLIBRAWSTRING";
-
-//========================
-//=OPTICAL FLOW FUNCTIONS=
-//========================
-
-flt64 CalcOptPSNR(flt64 mse, uint32 max) {
-    return xPow2<uint32>(max);
-}
-
-flt32 CalcOpticalDifferenceAverage(xPlane<flt32> &to_calc) {
-
-    flt32* addr = to_calc.getAddr();
-    int32 stride = to_calc.getStride();
-    flt32 sum = 0.0;
-    for (int32 y = 0; y < to_calc.getHeight(); y++) {
-        for (int32 x = 0; x < to_calc.getWidth(); x++)
-        {
-            sum += addr[x];
-        }
-        addr += stride;
-    }
-    return (sum / to_calc.getArea());
-}
-
-flt32 CalcOpticalPSNR(xPlane<flt32>& to_calc) {
-
-
-    //TODO: Code it again
-    flt32* addr = to_calc.getAddr();
-    int32 stride = to_calc.getStride();
-    flt32 sum = 0.0;
-    for (int32 y = 0; y < to_calc.getHeight(); y++) {
-        for (int32 x = 0; x < to_calc.getWidth(); x++)
-        {
-            sum += addr[x];
-        }
-        addr += stride;
-    }
-    return (sum / to_calc.getArea());
-}
-
-void xPlane2Mat(xPlane<flt32> &picture_input, cv::Mat &picture_output) {
-    assert(picture_output.size().width == picture_input.getWidth() && picture_output.size().height == picture_input.getHeight());
-    for (int x = 0; x < picture_input.getWidth(); x++) {
-        for (int y = 0; y < picture_input.getHeight(); y++)
-        {
-          picture_output.at<float>(y, x) = *picture_input.getAddr(int32V2(x, y));
-        }
-    }
-}
-
-void Mat2xPlane(cv::Mat& picture_input, xPlane<flt32V2>& picture_output) {
-    assert(picture_input.size().width == picture_output.getWidth() && picture_input.size().height == picture_output.getHeight());
-    for (int x = 0; x < picture_output.getWidth(); x++) {
-        for (int y = 0; y < picture_output.getHeight(); y++)
-        {
-            picture_output.accessPel(int32V2(x, y))[0] = picture_input.at<flt32>(y, 0 + x * 2);
-            picture_output.accessPel(int32V2(x, y))[1] = picture_input.at<flt32>(y, 1 + x * 2);
-        }
-    }
-}
-
-void Mat2xPlane(cv::Mat& picture_input, xPlane<flt32>& picture_output) {
-    assert(picture_input.size().width == picture_output.getWidth() && picture_input.size().height == picture_output.getHeight());
-    for (int x = 0; x < picture_output.getWidth(); x++) {
-        for (int y = 0; y < picture_output.getHeight(); y++)
-        {
-            picture_output.accessPel(int32V2(x, y)) = picture_input.at<flt32>(y, x);
-        }
-    }
-}
-
-bool IsSamexPic(xPicP &one, xPicP &two) {
-    if (one.getSize() != two.getSize()) return false;
-    int32 one_stride = one.getStride();
-    int32 two_stride = two.getStride();
-    uint16* one_addr = one.getAddr(eCmp::C0);
-    uint16* two_addr = two.getAddr(eCmp::C0);
-    for (int32 y = 0; y < one.getHeight(); y++)
-    {
-        for (int32 x = 0; x < one.getWidth(); x++)
-        {
-            if (one_addr[x] != two_addr[x]) return false;
-        }
-        one_addr += one_stride;
-        two_addr += two_stride;
-    }
-    return true;
-}
-
-void xPic2Mat(xPicP & picture_input, cv::Mat & picture_output, int channels = 3) {
-    assert(picture_output.size().width == picture_input.getWidth() && picture_output.size().height == picture_input.getHeight());
-    assert(channels == picture_output.channels());
-    for (int x = 0; x < picture_input.getWidth(); x++) {
-        for (int y = 0; y < picture_input.getHeight(); y++)
-        {
-            for (int z = 0; z < channels; z++) {
-                picture_output.at<uint16>(y, z + (x * channels)) = *picture_input.getAddr(int32V2(x, y), eCmp(z));
-            }
-
-        }
-    }
-    return;
-}
-
-void Mat2xPic(cv::Mat & picture_input, xPicP & picture_output, int channels = 3) {
-    assert(picture_input.size().width == picture_output.getWidth() && picture_input.size().height == picture_output.getHeight());
-    assert(channels == picture_input.channels());
-    for (int x = 0; x < picture_input.size().width; x++) {
-        for (int y = 0; y < picture_input.size().height; y++)
-        {
-            for (int z = 0; z < channels; z++) {
-                *picture_output.getAddr(int32V2(x, y), eCmp(z)) = (uint16)picture_input.at<uint16>(y, z + (x * channels));
-            }
-        }
-    }
-    return;
-}
 
 //===============================================================================================================================================================================================================
 
@@ -545,7 +428,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
     ThreadPoolIf.init(ThreadPool, 2);
   }  
 
-  xIVPSNRM Processor;
+  xTIVPSNR Processor;
   Processor.setLegacyWS8bit(Legacy8bitWSPSNR);
   Processor.setSearchRange (SearchRange     );
   Processor.setCmpWeights  (ComponentWeights);
@@ -735,8 +618,16 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
         flt64 PSNRFlow = 0.0;
         flt64 IVPSNRFlow = 0.0;
         flt64 IVPSNROnlyFlow = 0.0;
-        xPlane<flt32V2>flowPlaneOne(PictureSize, BitDepth, PictureMargin);
-        xPlane<flt32V2>flowPlaneTwo(PictureSize, BitDepth, PictureMargin);
+        std::vector<xPlane<flt32V2>>flowPlane(2);
+        for (int32 i = 0; i < NumInputsCur; i++) { flowPlane[i].create(PictureSize, BitDepth, PictureMargin); }
+
+        double pyr_scale = 0.5;
+        int levels = 4;
+        int winsize = 10;
+        int iterations = 4;
+        int poly_n = 5;
+        double poly_sigma = 1.2;
+
         if (f == 0) {
 
             prev[0] = cv::Mat(PictureHeight, PictureWidth, CV_16UC1);
@@ -745,8 +636,8 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             next[0] = cv::Mat(PictureHeight, PictureWidth, CV_16UC1);
             next[1] = cv::Mat(PictureHeight, PictureWidth, CV_16UC1);
 
-            xPic2Mat(PictureP[0], prev[0], 1);
-            xPic2Mat(PictureP[1], prev[1], 1);
+            xUtilsOCV::xPic2Mat(PictureP[0], prev[0], 1);
+            xUtilsOCV::xPic2Mat(PictureP[1], prev[1], 1);
             FrameIVPSNRFlowCheck[f] = 0.0;
             FramePSNRFlow[f] = 0.0;
             FrameIVPSNRFlow[f] = 0.0;
@@ -757,56 +648,38 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             cv::Mat flow[2];
             if (ThreadPoolIf.isActive())
             {
-                for (int32 i = 0; i < 2; i++) { ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, i](int32 /*ThreadIdx*/) { 
-                    xPic2Mat(PictureP[i], next[i], 1);
+                for (int32 i = 0; i < 2; i++) { ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, &pyr_scale, &levels, &winsize, &iterations, &poly_n, &poly_sigma, i](int32 /*ThreadIdx*/) {
+                    xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
                     flow[i] = (prev[i].size(), CV_32FC2);
-                    calcOpticalFlowFarneback(prev[i], next[i], flow[i], 0.5, 3, 15, 3, 5, 1.2, 0); 
+                    calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+                    xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
+                    flowPlane[i].extend();
                     }); }
                 ThreadPoolIf.waitUntilTasksFinished(2);
             }
             else
             {
                 for (int32 i = 0; i < 2; i++) { 
-                    xPic2Mat(PictureP[i], next[i], 1);
+                    xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
                     flow[i] = (prev[i].size(), CV_32FC2);
-                    calcOpticalFlowFarneback(prev[i], next[i], flow[i], 0.5, 3, 15, 3, 5, 1.2, 0); 
+                    calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+                    xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
+                    flowPlane[i].extend();
                 }
             }
 
-            Mat2xPlane(flow[0], flowPlaneOne);
-            Mat2xPlane(flow[1], flowPlaneTwo);
-            flowPlaneOne.extend();
-            flowPlaneTwo.extend();
-
-            IVPSNRFlowCheck = Processor.calcPicIVPSNRFlowCheck(&PictureP[0], &PictureP[1], &flowPlaneOne, &flowPlaneTwo);
+            IVPSNRFlowCheck = Processor.calcPicIVPSNRFlowCheck(&PictureP[0], &PictureP[1], &flowPlane[0], &flowPlane[1]);
             FrameIVPSNRFlowCheck[f] = IVPSNRFlowCheck; 
 
-            PSNRFlow = Processor.calcPicPSNRFlow(&flowPlaneOne, &flowPlaneTwo);
+            PSNRFlow = Processor.calcPicPSNRFlow(&flowPlane[0], &flowPlane[1]);
             FramePSNRFlow[f] = PSNRFlow;
 
-            IVPSNRFlow = Processor.calcPicIVPSNRFlowUse(&PictureP[0], &PictureP[1], &flowPlaneOne, &flowPlaneTwo);
+            IVPSNRFlow = Processor.calcPicIVPSNRFlowUse(&PictureP[0], &PictureP[1], &flowPlane[0], &flowPlane[1]);
             FrameIVPSNRFlow[f] = IVPSNRFlow;
 
-            IVPSNROnlyFlow = Processor.calcPicIVPSNROnlyFlow(&flowPlaneOne, &flowPlaneTwo);
+            IVPSNROnlyFlow = Processor.calcPicIVPSNROnlyFlow(&flowPlane[0], &flowPlane[1]);
             FrameIVPSNROnlyFlow[f] = IVPSNROnlyFlow;
         }
-        
-        /*cv::Mat subtracted;
-        cv::subtract(flow[0], flow[1], subtracted);
-
-        cv::Mat magParts[2];
-        split(subtracted, magParts);
-
-        cv::Mat magnitude;
-        cv::magnitude(magParts[0], magParts[1], magnitude);
-
-        xPlane<flt32> tempMag(PictureSize, BitDepth, PictureMargin);
-
-        Mat2xPlane(magnitude, tempMag);
-        CurrentFlow = CalcOpticalDifferenceAverage(tempMag);
-        SumOFlow += CurrentFlow;
-        next[0].copyTo(prev[0]);
-        next[1].copyTo(prev[1]);*/
 
         if (VerboseLevel >= 2) {
             fmt::printf("Frame %08d IV-PSNR-Flow-Check %8.4f", f, IVPSNRFlowCheck);

@@ -59,6 +59,7 @@ public:
   //results
   using tRes4 = std::tuple<flt64V4, boolV4>;
   using tRes1 = std::tuple<flt64  , bool  >;
+  using tFlowPlane = xPlane<flt32V2>;
   //debug calback types
   using tDCfMSK = std::function<void(int32)>;
 
@@ -77,12 +78,12 @@ public:
   void  uninitThreadPool(                                     ) { m_ThreadPoolIf.uininit(); }
 
   tRes4 calcPicPSNR    (const xPicP* Tst, const xPicP* Ref);
-  flt64 calcPicPSNRFlow(const xPlane<flt32V2>* Tst, const xPlane<flt32V2>* Ref);
+  flt64 calcPicPSNRFlow(const tFlowPlane* Tst, const tFlowPlane* Ref);
   tRes4 calcPicPSNRM   (const xPicP* Tst, const xPicP* Ref, const xPicP* Msk);
 
 protected:
   tRes1 xCalcCmpPSNR    (const xPicP* Tst, const xPicP* Ref,                                             eCmp CmpId);
-  flt64 xCalcCmpPSNRFlow(const xPlane<flt32V2>* Tst, const xPlane<flt32V2>* Ref);
+  flt64 xCalcCmpPSNRFlow(const tFlowPlane* Tst, const tFlowPlane* Ref);
   tRes1 xCalcCmpPSNRM   (const xPicP* Tst, const xPicP* Ref, const xPicP* Msk, const int32 NumNonMasked, eCmp CmpId);
 
 public:
