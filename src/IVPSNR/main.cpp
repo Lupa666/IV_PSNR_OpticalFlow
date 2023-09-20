@@ -622,9 +622,9 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
         for (int32 i = 0; i < NumInputsCur; i++) { flowPlane[i].create(PictureSize, BitDepth, PictureMargin); }
 
         double pyr_scale = 0.5;
-        int levels = 4;
+        int levels = 2;
         int winsize = 10;
-        int iterations = 4;
+        int iterations = 2;
         int poly_n = 5;
         double poly_sigma = 1.2;
 
