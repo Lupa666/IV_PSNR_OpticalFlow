@@ -97,6 +97,12 @@ add_library(${LIB_PMBB_NAME} ${LIB_PMBB_SOURCES})
 target_include_directories(${LIB_PMBB_NAME} PRIVATE ${LIB_FMT_LOCATION})
 
 #=========================================================================================================================================
+# OpenCV
+#=========================================================================================================================================
+find_package (OpenCV REQUIRED)
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+
+#=========================================================================================================================================
 # IV-PSNR
 #=========================================================================================================================================
 set(PROJECT_LOCATION "src/IVPSNR")
@@ -113,6 +119,7 @@ add_executable(${PROJECT_NAME} ${PROJECT_SOURCES})
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_FMT_LOCATION})
 target_include_directories(${PROJECT_NAME} PRIVATE ${LIB_PMBB_LOCATION})
 target_link_libraries (${PROJECT_NAME} PRIVATE ${LIB_PMBB_NAME} Threads::Threads)
+target_link_libraries (${PROJECT_NAME} PRIVATE ${OpenCV_LIBS})
 
 #=========================================================================================================================================
 

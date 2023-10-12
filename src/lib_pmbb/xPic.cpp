@@ -64,6 +64,24 @@ void xPicCommon::xInit(int32V2 Size, int32 BitDepth, int32 Margin, int32 NumCmps
 
   m_IsMarginExtended = false;
 }
+void xPicCommon::xInit(int32V2 Size, int32 BitDepth, int32 Margin, int32 NumCmps, int32 PelTypeSize)
+{
+    assert(Size.getX() > 0 && Size.getY() > 0 && Margin >= 0 && NumCmps > 0 && NumCmps <= c_MaxNumCmps);
+
+    m_Width = Size.getX();
+    m_Height = Size.getY();
+    m_Margin = Margin;
+    m_Stride = m_Width + (m_Margin << 1);
+    m_BitDepth = BitDepth;
+    m_NumCmps = NumCmps;
+
+    m_BytesPerSample = m_BitDepth <= 8 ? 1 : 2;
+    m_BuffCmpNumPels = (m_Width + (m_Margin << 1)) * (m_Height + (m_Margin << 1));
+    m_BuffCmpNumBytes = m_BuffCmpNumPels * PelTypeSize;
+
+    m_IsMarginExtended = false;
+}
+
 void xPicCommon::xUnInit()
 {
   m_Width            = NOT_VALID;

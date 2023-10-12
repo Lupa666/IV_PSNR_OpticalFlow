@@ -52,11 +52,7 @@
 #include <thread>
 #include <iostream>
 #include "fmt/chrono.h"
-#include <opencv2/core/core.hpp>
-#include <opencv2/highgui/highgui.hpp>
-#include <opencv2/imgproc/imgproc.hpp>
-#include <opencv2/video/video.hpp>
-#include <opencv2/videoio/videoio.hpp>
+#include <opencv2/opencv.hpp>
 
 using namespace PMBB_NAMESPACE;
 

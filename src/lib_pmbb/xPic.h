@@ -71,6 +71,7 @@ protected:
 
 protected:
   void xInit  (int32V2 Size, int32 BitDepth, int32 Margin, int32 NumCmps);
+  void xInit  (int32V2 Size, int32 BitDepth, int32 Margin, int32 NumCmps, int32 PelTypeSize);
   void xUnInit();
 
 public:
