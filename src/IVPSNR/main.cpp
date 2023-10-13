@@ -41,7 +41,6 @@
 #include "xSeq.h"
 #include "xIVPSNR.h"
 #include "xCfgINI.h"
-#include "xPlane.h"
 #include "xUtilsOCV.h"
 #include <math.h>
 #include <fstream>
@@ -53,6 +52,7 @@
 #include <iostream>
 #include "fmt/chrono.h"
 #include <opencv2/opencv.hpp>
+#include "xPlane.h"
 
 using namespace PMBB_NAMESPACE;
 

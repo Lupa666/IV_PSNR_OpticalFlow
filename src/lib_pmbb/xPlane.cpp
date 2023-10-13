@@ -3,7 +3,6 @@
     SPDX-License-Identifier: BSD-3-Clause
 */
 
-#define PMBB_xPlane_IMPLEMENTATION
 #include "xPlane.h"
 #include "xPixelOps.h"
 #include <typeinfo>

@@ -40,9 +40,9 @@ public:
   void   extend ();                                   
                                    
   //data type/range helpers       
-  PelType getMaxPelValue() const { if constexpr (std::is_integral_v<PelType>) { return (PelType)xBitDepth2MaxValue(m_BitDepth);} else { return (PelType)1.0; } }
-  PelType getMidPelValue() const { if constexpr (std::is_integral_v<PelType>) { return (PelType)xBitDepth2MidValue(m_BitDepth);} else { return (PelType)0.5; } }
-  PelType getMinPelValue() const { return (PelType)0; }
+  //PelType getMaxPelValue() const { if constexpr (std::is_integral_v<PelType>) { return (PelType)xBitDepth2MaxValue(m_BitDepth);} else { return (PelType)1.0; } }
+  //PelType getMidPelValue() const { if constexpr (std::is_integral_v<PelType>) { return (PelType)xBitDepth2MidValue(m_BitDepth);} else { return (PelType)0.5; } }
+  //PelType getMinPelValue() const { return (PelType)0; }
 
   //access picture data
   inline int32          getStride(                ) const { return m_Stride; }
@@ -94,16 +94,17 @@ public:
 //---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 #ifndef PMBB_xPlane_IMPLEMENTATION
-extern template class xPlane<uint8 >;
-extern template class xPlane< int8 >;
-extern template class xPlane<uint16>;
-extern template class xPlane< int16>;
-extern template class xPlane<uint32>;
-extern template class xPlane< int32>;
-extern template class xPlane<uint64>;
-extern template class xPlane< int64>;
-extern template class xPlane< flt32>;
-extern template class xPlane< flt64>;
+template class xPlane<uint8 >;
+template class xPlane< int8 >;
+template class xPlane<uint16>;
+template class xPlane< int16>;
+template class xPlane<uint32>;
+template class xPlane< int32>;
+template class xPlane<uint64>;
+template class xPlane< int64>;
+template class xPlane< flt32>;
+template class xPlane< flt64>;
+template class xPlane<flt32V2>;
 #endif // !PMBB_xPlane_IMPLEMENTATION
 
 //===============================================================================================================================================================================================================
