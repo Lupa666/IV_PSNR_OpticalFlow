@@ -486,11 +486,12 @@ int32V4 xTIVPSNR::xCalcDistAsymmetricRow(const xPicP* Ref, const xPicP* Tst, con
     const uint16* TstPtrY = Tst->getAddr(eCmp::LM) + TstOffset;
     const uint16* TstPtrU = Tst->getAddr(eCmp::CB) + TstOffset;
     const uint16* TstPtrV = Tst->getAddr(eCmp::CR) + TstOffset;
+    const flt32V2* TstPtrP = TstPlane->getAddr() + TstOffset;
 
     for (int32 x = 0; x < Width; x++)
     {
         const int32V4 CurrTstValue = int32V4((int32)(TstPtrY[x]), (int32)(TstPtrU[x]), (int32)(TstPtrV[x]), 0) + GlobalColorShift;
-        const flt32V2 CurrTstPValue = *(TstPlane->getAddr() + TstOffset);
+        const flt32V2 CurrTstPValue = TstPtrP[x];
         const int32   BestRefOffset = xFindBestPixelWithinBlock(Ref, CurrTstValue, x, y, SearchRange, CmpWeights, RefPlane, CurrTstPValue);
 
         for (uint32 CmpIdx = 0; CmpIdx < 3; CmpIdx++)
@@ -516,11 +517,11 @@ flt64 xTIVPSNR::xCalcDistAsymmetricRowOnlyFlow(const tFlowPlane* Ref, const tFlo
 
     flt64 RowDist = 0.0;
 
-    const flt32V2* TstPtrY = Tst->getAddr() + TstOffset;
+    const flt32V2* TstPtrP = Tst->getAddr() + TstOffset;
 
     for (int32 x = 0; x < Width; x++)
     {
-        const flt32V2 CurrTstValue = *(Tst->getAddr() + TstOffset);
+        const flt32V2 CurrTstValue = TstPtrP[x];
         const int32   BestRefOffset = xFindBestPixelWithinBlockOnlyFlow(Ref, CurrTstValue, x, y, SearchRange);
 
         const flt32V2* RefAddr = Ref->getAddr();
