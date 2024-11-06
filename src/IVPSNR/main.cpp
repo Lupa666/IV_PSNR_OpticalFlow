@@ -171,7 +171,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
 
   //==============================================================================
   // parsing configuration
-  xCfgINI::xParser CfgParser;  
+  xCfgINI::xParser CfgParser;
   CfgParser.addCommandlineParam(xCfgINI::xCmdParam("-i0" , "", "InputFile0"          ));
   CfgParser.addCommandlineParam(xCfgINI::xCmdParam("-i1" , "", "InputFile1"          ));  
   CfgParser.addCommandlineParam(xCfgINI::xCmdParam("-w"  , "", "PictureWidth"        ));
@@ -200,6 +200,15 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   bool CommandlineResult = CfgParser.loadFromCommandline(argc, argv);
   if(!CommandlineResult) { xCfgINI::printErrorMessage("! invalid commandline\n", HelpString); return EXIT_FAILURE; }
    
+  //TODO: temp variables, to be changed later
+   
+  bool CalcCheckFlow = true;
+  bool CalcPSNRFlow = true;
+  bool CalcIVPSNRFlow = true;
+  bool CalcIVPSNRFlowOnly = true;
+
+  //TODO: temp variables, to be changed later
+
   //readed from commandline/config 
   constexpr int32 NumInputsMax = 3;
 
@@ -455,6 +464,12 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   tDuration Duration__PSNR = tDuration(0);
   tDuration DurationWSPSNR = tDuration(0);
   tDuration DurationIVPSNR = tDuration(0);
+  tDuration DurationFlowCalc = tDuration(0);
+  tDuration DurationCalcFlow = tDuration(0);
+  tDuration DurationIVPSNRFlowCheck = tDuration(0);
+  tDuration DurationPSNRFlow = tDuration(0);
+  tDuration DurationIVPSNRFlow = tDuration(0);
+  tDuration DurationIVPSNROnlyFlow = tDuration(0);
 
   std::vector<flt64> Frame__PSNR[4];
   std::vector<flt64> FrameWSPSNR[4];
@@ -605,11 +620,20 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
         fmt::printf("\n");
       }
     }
+
+    tTimePoint T5 = (VerboseLevel >= 3) ? tClock::now() : tTimePoint::min();
+
     /*=============*/
     /*OPTICAL FLOW*/
     /*=============*/
 
-    if (true/*CalcFLOW*/) {
+    tTimePoint T6 = tTimePoint::min();
+    tTimePoint T7 = tTimePoint::min();
+    tTimePoint T8 = tTimePoint::min();
+    tTimePoint T9 = tTimePoint::min();
+    tTimePoint T10 = tTimePoint::min();
+
+    if (CalcCheckFlow || CalcPSNRFlow || CalcIVPSNRFlow || CalcIVPSNRFlowOnly) {
         flt64 IVPSNRFlowCheck = 0.0;
         flt64 PSNRFlow = 0.0;
         flt64 IVPSNRFlow = 0.0;
@@ -644,18 +668,20 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             cv::Mat flow[2];
             if (ThreadPoolIf.isActive())
             {
-                for (int32 i = 0; i < 2; i++) { ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, &pyr_scale, &levels, &winsize, &iterations, &poly_n, &poly_sigma, i](int32 /*ThreadIdx*/) {
-                    xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
-                    flow[i] = (prev[i].size(), CV_32FC2);
-                    calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
-                    xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
-                    flowPlane[i].extend();
-                    }); }
+                for (int32 i = 0; i < 2; i++) {
+                    ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, &pyr_scale, &levels, &winsize, &iterations, &poly_n, &poly_sigma, i](int32 /*ThreadIdx*/) {
+                        xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
+                        flow[i] = (prev[i].size(), CV_32FC2);
+                        calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+                        xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
+                        flowPlane[i].extend();
+                        });
+                }
                 ThreadPoolIf.waitUntilTasksFinished(2);
             }
             else
             {
-                for (int32 i = 0; i < 2; i++) { 
+                for (int32 i = 0; i < 2; i++) {
                     xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
                     flow[i] = (prev[i].size(), CV_32FC2);
                     calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
@@ -664,39 +690,64 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
                 }
             }
 
-            IVPSNRFlowCheck = Processor.calcPicIVPSNRFlowCheck(&PictureP[0], &PictureP[1], &flowPlane[0], &flowPlane[1]);
-            FrameIVPSNRFlowCheck[f] = IVPSNRFlowCheck; 
+            T6 = (VerboseLevel >= 3) ? tClock::now() : tTimePoint::min();
 
-            PSNRFlow = Processor.calcPicPSNRFlow(&flowPlane[0], &flowPlane[1]);
-            FramePSNRFlow[f] = PSNRFlow;
+            if (CalcCheckFlow) {
+                IVPSNRFlowCheck = Processor.calcPicIVPSNRFlowCheck(&PictureP[0], &PictureP[1], &flowPlane[0], &flowPlane[1]);
+                FrameIVPSNRFlowCheck[f] = IVPSNRFlowCheck;
+                if (VerboseLevel >= 2) {
+                    fmt::printf("Frame %08d IV-PSNR-Flow-Check %8.4f", f, IVPSNRFlowCheck);
+                    fmt::printf("\n");
+                }
+            }
 
-            IVPSNRFlow = Processor.calcPicIVPSNRFlowUse(&PictureP[0], &PictureP[1], &flowPlane[0], &flowPlane[1]);
-            FrameIVPSNRFlow[f] = IVPSNRFlow;
+            T7 = (VerboseLevel >= 3) ? tClock::now() : tTimePoint::min();
 
-            IVPSNROnlyFlow = Processor.calcPicIVPSNROnlyFlow(&flowPlane[0], &flowPlane[1]);
-            FrameIVPSNROnlyFlow[f] = IVPSNROnlyFlow;
-        }
+            if (CalcPSNRFlow) {
+                PSNRFlow = Processor.calcPicPSNRFlow(&flowPlane[0], &flowPlane[1]);
+                FramePSNRFlow[f] = PSNRFlow;
+                if (VerboseLevel >= 2) {
+                    fmt::printf("Frame %08d PSNR-Flow %8.4f", f, PSNRFlow);
+                    fmt::printf("\n");
+                }
+            }
 
-        if (VerboseLevel >= 2) {
-            fmt::printf("Frame %08d IV-PSNR-Flow-Check %8.4f", f, IVPSNRFlowCheck);
-            fmt::printf("\n");
-            fmt::printf("Frame %08d PSNR-Flow %8.4f", f, PSNRFlow);
-            fmt::printf("\n");
-            fmt::printf("Frame %08d IV-PSNR-Flow %8.4f", f, IVPSNRFlow);
-            fmt::printf("\n");
-            fmt::printf("Frame %08d IV-PSNR-Only-Flow %8.4f", f, IVPSNROnlyFlow);
-            fmt::printf("\n");
+            T8 = (VerboseLevel >= 3) ? tClock::now() : tTimePoint::min();
+
+            if (CalcIVPSNRFlow) {
+                IVPSNRFlow = Processor.calcPicIVPSNRFlowUse(&PictureP[0], &PictureP[1], &flowPlane[0], &flowPlane[1]);
+                FrameIVPSNRFlow[f] = IVPSNRFlow;
+                if (VerboseLevel >= 2) {
+                    fmt::printf("Frame %08d IV-PSNR-Flow %8.4f", f, IVPSNRFlow);
+                    fmt::printf("\n");
+                }
+            }
+
+            T9 = (VerboseLevel >= 3) ? tClock::now() : tTimePoint::min();
+
+            if (CalcIVPSNRFlowOnly) {
+                IVPSNROnlyFlow = Processor.calcPicIVPSNROnlyFlow(&flowPlane[0], &flowPlane[1]);
+                FrameIVPSNROnlyFlow[f] = IVPSNROnlyFlow;
+                if (VerboseLevel >= 2) {
+                    fmt::printf("Frame %08d IV-PSNR-Only-Flow %8.4f", f, IVPSNROnlyFlow);
+                    fmt::printf("\n");
+                }
+            }
+
+            T10 = (VerboseLevel >= 3) ? tClock::now() : tTimePoint::min();
         }
     }
-
-
-    tTimePoint T5 = (VerboseLevel >= 3) ? tClock::now() : tTimePoint::min();
 
     Duration__Load += (T1 - T0);
     Duration__Prep += (T2 - T1);
     Duration__PSNR += (T3 - T2);
     DurationWSPSNR += (T4 - T3);
     DurationIVPSNR += (T5 - T4);
+    DurationCalcFlow += (T6 - T5);
+    DurationIVPSNRFlowCheck += (T7 - T6);
+    DurationPSNRFlow += (T8 - T7);
+    DurationIVPSNRFlow += (T9 - T8);
+    DurationIVPSNROnlyFlow += (T10 - T9);
   }
   
   //==============================================================================
@@ -743,14 +794,14 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
     OutputStream                  << fmt::sprintf("FILE1  \"%s\"\n", InputFile[1]);
     OutputStream                  << fmt::format ("TIME   {:%Y-%m-%d  %H:%M:%S}\n", fmt::localtime(TimeStamp));
     
-    if(Calc__PSNR)              { OutputStream << fmt::sprintf("PSNR%s   %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2]); }
-    if(CalcWSPSNR)              { OutputStream << fmt::sprintf("WSPSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, AvgWSPSNR[0], AvgWSPSNR[1], AvgWSPSNR[2]); }
-    if(CalcIVPSNR)              { OutputStream << fmt::sprintf("IVPSNR%s %8.4f dB                    \n", Suffix, AvgIVPSNR                               ); }
-    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("IVPSNRCheck%s   %8.4f\n",Suffix, AvgIVPSNRFlowCheck); }
-    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("PSNRFlow%s   %8.4f\n",Suffix, Avg__PSNRFlow); }
-    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("PSNRWFlow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
-    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("IVPSNRFlow%s %8.4f dB                \n", Suffix, AvgIVPSNRFlow); }
-    if (true/*CalcOptflow*/)    { OutputStream << fmt::sprintf("IVPSNROnlyFlow%s %8.4f dB                \n", Suffix, AvgIVPSNROnlyFlow); }
+    if(Calc__PSNR)                  { OutputStream << fmt::sprintf("PSNR%s           %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2]); }
+    if(CalcWSPSNR)                  { OutputStream << fmt::sprintf("WSPSNR%s         %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, AvgWSPSNR[0], AvgWSPSNR[1], AvgWSPSNR[2]); }
+    if(CalcIVPSNR)                  { OutputStream << fmt::sprintf("IVPSNR%s         %8.4f dB                    \n", Suffix, AvgIVPSNR                               ); }
+    if(CalcCheckFlow)               { OutputStream << fmt::sprintf("IVPSNRCheck%s    %8.4f\n",Suffix, AvgIVPSNRFlowCheck); }
+    if(CalcPSNRFlow)                { OutputStream << fmt::sprintf("PSNRFlow%s       %8.4f\n",Suffix, Avg__PSNRFlow); }
+    if(CalcPSNRFlow && Calc__PSNR)  { OutputStream << fmt::sprintf("PSNRWFlow%s      %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
+    if(CalcIVPSNRFlow)              { OutputStream << fmt::sprintf("IVPSNRFlow%s     %8.4f dB                \n", Suffix, AvgIVPSNRFlow); }
+    if(CalcIVPSNRFlowOnly)          { OutputStream << fmt::sprintf("IVPSNROnlyFlow%s %8.4f dB                \n", Suffix, AvgIVPSNROnlyFlow); }
     OutputStream.close();
   }
 
@@ -758,14 +809,14 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   //printout results
   fmt::printf("\n\n");
   
-  if(Calc__PSNR)           { fmt::printf("Average          PSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2]); }
-  if(CalcWSPSNR)           { fmt::printf("Average          WSPSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, AvgWSPSNR[0], AvgWSPSNR[1], AvgWSPSNR[2]); }
-  if(CalcIVPSNR)           { fmt::printf("Average          IVPSNR%s %8.4f dB                    \n", Suffix, AvgIVPSNR                               ); }
-  if (true/*CalcOptflow*/) { fmt::printf("Average          IV-PSNRCheck%s   %8.4f dB\n",Suffix, AvgIVPSNRFlowCheck); }
-  if (true/*CalcOptflow*/) { fmt::printf("Average          PSNRFlow%s   %8.4f dB\n",Suffix, Avg__PSNRFlow); }
-  if (true/*CalcOptflow*/) { fmt::printf("Average          PSNRWFlow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
-  if (true/*CalcOptflow*/) { fmt::printf("Average          IVPSNRFlow%s %8.4f dB                \n", Suffix, AvgIVPSNRFlow); }
-  if (true/*CalcOptflow*/) { fmt::printf("Average          IVPSNROnlyFlow%s %8.4f dB                \n", Suffix, AvgIVPSNROnlyFlow); }
+  if(Calc__PSNR)                    { fmt::printf("Average          PSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2]); }
+  if(CalcWSPSNR)                    { fmt::printf("Average          WSPSNR%s %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, AvgWSPSNR[0], AvgWSPSNR[1], AvgWSPSNR[2]); }
+  if(CalcIVPSNR)                    { fmt::printf("Average          IVPSNR%s %8.4f dB                    \n", Suffix, AvgIVPSNR                               ); }
+  if(CalcCheckFlow)                 { fmt::printf("Average          IV-PSNRCheck%s   %8.4f dB\n",Suffix, AvgIVPSNRFlowCheck); }
+  if(CalcPSNRFlow)                  { fmt::printf("Average          PSNRFlow%s   %8.4f dB\n",Suffix, Avg__PSNRFlow); }
+  if(CalcPSNRFlow && Calc__PSNR)    { fmt::printf("Average          PSNRWFlow%s   %8.4f dB  %8.4f dB  %8.4f dB  %8.4f dB\n", Suffix, Avg__PSNR[0], Avg__PSNR[1], Avg__PSNR[2], Avg__PSNRFlow); }
+  if(CalcIVPSNRFlow)                { fmt::printf("Average          IVPSNRFlow%s %8.4f dB                \n", Suffix, AvgIVPSNRFlow); }
+  if(CalcIVPSNRFlowOnly)            { fmt::printf("Average          IVPSNROnlyFlow%s %8.4f dB                \n", Suffix, AvgIVPSNROnlyFlow); }
   fmt::printf("\n");
   if(AnyFake ) { fmt::printf("FakePSNR\n"); }
   if(AllExact) { fmt::printf("ExactSequences\n"); }
@@ -782,11 +833,16 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   }
   if(VerboseLevel >= 3)
   {
-    if(true      ) { fmt::printf("AvgTime          LOAD %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(Duration__Load).count() / NumFrames); }
-    if(true      ) { fmt::printf("AvgTime          PREP %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(Duration__Prep).count() / NumFrames); }
-    if(Calc__PSNR) { fmt::printf("AvgTime          PSNR %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(Duration__PSNR).count() / NumFrames); }
-    if(CalcWSPSNR) { fmt::printf("AvgTime        WSPSNR %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationWSPSNR).count() / NumFrames); }
-    if(CalcIVPSNR) { fmt::printf("AvgTime        IVPSNR %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationIVPSNR).count() / NumFrames); }
+    if(true      )                  { fmt::printf("AvgTime           LOAD %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(Duration__Load).count() / NumFrames); }
+    if(true      )                  { fmt::printf("AvgTime           PREP %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(Duration__Prep).count() / NumFrames); }
+    if(Calc__PSNR)                  { fmt::printf("AvgTime           PSNR %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(Duration__PSNR).count() / NumFrames); }
+    if(CalcWSPSNR)                  { fmt::printf("AvgTime         WSPSNR %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationWSPSNR).count() / NumFrames); }
+    if(CalcIVPSNR)                  { fmt::printf("AvgTime         IVPSNR %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationIVPSNR).count() / NumFrames); }
+    if(CalcCheckFlow || CalcPSNRFlow || CalcIVPSNRFlow || CalcIVPSNRFlowOnly)             
+								    { fmt::printf("AvgTime       CalcFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationFlowCalc).count() / NumFrames); }
+    if(CalcPSNRFlow)              	{ fmt::printf("AvgTime       PSNRFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationFlowCalc).count() / NumFrames); }
+    if(CalcIVPSNRFlow)            	{ fmt::printf("AvgTime     IVPSNRFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationFlowCalc).count() / NumFrames); }
+    if(CalcIVPSNRFlowOnly)        	{ fmt::printf("AvgTime IVPSNRFlowOnly %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationFlowCalc).count() / NumFrames); }
   }
   fmt::printf("\n");
   fmt::printf("TotalTime %.2f s\n", std::chrono::duration_cast<tDurationS>(ProcessingEnd - ProcessingBeg).count());
@@ -794,8 +850,6 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   fmt::printf("END-OF-LOG\n");
   fflush(stdout);
   
-  
-    
   return EXIT_SUCCESS;
 }
 
