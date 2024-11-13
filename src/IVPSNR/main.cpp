@@ -51,8 +51,8 @@
 #include <thread>
 #include <iostream>
 #include "fmt/chrono.h"
-#include <opencv2/opencv.hpp>
 #include "xPlane.h"
+#include <opencv2/opencv.hpp>
 
 using namespace PMBB_NAMESPACE;
 
@@ -664,7 +664,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             FrameIVPSNROnlyFlow[f] = 0.0;
         }
         else {
-
+            
             cv::Mat flow[2];
             if (ThreadPoolIf.isActive())
             {
@@ -672,7 +672,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
                     ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, &pyr_scale, &levels, &winsize, &iterations, &poly_n, &poly_sigma, i](int32 /*ThreadIdx*/) {
                         xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
                         flow[i] = (prev[i].size(), CV_32FC2);
-                        calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+                        cv::calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
                         xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
                         flowPlane[i].extend();
                         });
@@ -684,7 +684,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
                 for (int32 i = 0; i < 2; i++) {
                     xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
                     flow[i] = (prev[i].size(), CV_32FC2);
-                    calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
+                    cv::calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
                     xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
                     flowPlane[i].extend();
                 }
