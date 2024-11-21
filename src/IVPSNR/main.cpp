@@ -53,7 +53,9 @@
 #include "fmt/chrono.h"
 #include <opencv2/opencv.hpp>
 #include "xPlane.h"
+#include <opencv2/optflow/rlofflow.hpp>
 
+#define RLOF true
 
 using namespace PMBB_NAMESPACE;
 
@@ -642,12 +644,18 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
         std::vector<xPlane<flt32V2>>flowPlane(2);
         for (int32 i = 0; i < NumInputsCur; i++) { flowPlane[i].create(PictureSize, BitDepth, PictureMargin); }
 
+        #if RLOF == false
+        //********************************
+        //****FARNEBACK IMPLEMENTATION****
+        //********************************
         double pyr_scale = 0.5;
         int levels = 2;
         int winsize = 10;
         int iterations = 2;
         int poly_n = 5;
         double poly_sigma = 1.2;
+
+        #endif
 
         if (f == 0) {
 
@@ -670,12 +678,32 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             if (ThreadPoolIf.isActive())
             {
                 for (int32 i = 0; i < 2; i++) {
-                    ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, &pyr_scale, &levels, &winsize, &iterations, &poly_n, &poly_sigma, i](int32 /*ThreadIdx*/) {
+                    ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, /*&pyr_scale, &levels, &winsize, &iterations, &poly_n, &poly_sigma,*/ i](int32 /*ThreadIdx*/) {
+                        
+                        #if RLOF == true
+                        //********************************
+                        //******RLOF IMPLEMENTATION*******
+                        //********************************
+                        xUtilsOCV::xPic2Mat(PictureP[i], next[i], 3);
+                        flow[i] = (prev[i].size(), CV_32FC2);
+                        cv::optflow::calcOpticalFlowDenseRLOF(prev[i], next[i], flow[i]);
+                        xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
+                        flowPlane[i].extend();
+
+                        #endif
+
+                        #if RLOF == false
+                        //********************************
+                        //****FARNEBACK IMPLEMENTATION****
+                        //********************************
+                        
                         xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
                         flow[i] = (prev[i].size(), CV_32FC2);
                         cv::calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
                         xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
                         flowPlane[i].extend();
+                        
+                        #endif
                         });
                 }
                 ThreadPoolIf.waitUntilTasksFinished(2);
@@ -683,11 +711,31 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             else
             {
                 for (int32 i = 0; i < 2; i++) {
+
+                    #if RLOF == true
+                    //********************************
+                    //******RLOF IMPLEMENTATION*******
+                    //********************************
+                    xUtilsOCV::xPic2Mat(PictureP[i], next[i], 3);
+                    flow[i] = (prev[i].size(), CV_32FC2);
+                    cv::optflow::calcOpticalFlowDenseRLOF(prev[i], next[i], flow[i]);
+                    xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
+                    flowPlane[i].extend();
+
+                    #endif
+
+                    #if RLOF == false
+                    //********************************
+                    //****FARNEBACK IMPLEMENTATION****
+                    //********************************
+
                     xUtilsOCV::xPic2Mat(PictureP[i], next[i], 1);
                     flow[i] = (prev[i].size(), CV_32FC2);
                     cv::calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
                     xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
                     flowPlane[i].extend();
+
+                    #endif
                 }
             }
 
