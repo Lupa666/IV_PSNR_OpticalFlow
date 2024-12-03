@@ -60,7 +60,7 @@ namespace PMBB_NAMESPACE {
             for (int y = 0; y < picture_input.getHeight(); y++)
             {
                 for (int z = 0; z < channels; z++) {
-                    picture_output.at<uint16>(y, z + (x * channels)) = *picture_input.getAddr(int32V2(x, y), eCmp(z));
+                    picture_output.at<uint8>(y, z + (x * channels)) = *picture_input.getAddr(int32V2(x, y), eCmp(z));
                 }
 
             }
@@ -75,7 +75,7 @@ namespace PMBB_NAMESPACE {
             for (int y = 0; y < picture_input.size().height; y++)
             {
                 for (int z = 0; z < channels; z++) {
-                    *picture_output.getAddr(int32V2(x, y), eCmp(z)) = (uint16)picture_input.at<uint16>(y, z + (x * channels));
+                    *picture_output.getAddr(int32V2(x, y), eCmp(z)) = (uint8)picture_input.at<uint16>(y, z + (x * channels));
                 }
             }
         }

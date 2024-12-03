@@ -239,3 +239,7 @@ OutputFile      = "IV-PSNR.txt"
 ### v1.0 [M45093]
 
 * first release
+
+# WARNING
+
+* Running an tIV-PSNR with RLOF flag enabled requires installing extra opencv modules, as well as modifying "sparse_match_interpolators.cpp" file to replace "CV_Assert(match_num<SHRT_MAX);" to "CV_Assert(match_num<INT_MAX);"

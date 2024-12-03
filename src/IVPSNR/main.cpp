@@ -55,7 +55,7 @@
 #include "xPlane.h"
 #include <opencv2/optflow/rlofflow.hpp>
 
-#define RLOF true
+#define RLOF false
 
 using namespace PMBB_NAMESPACE;
 
@@ -467,7 +467,6 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
   tDuration Duration__PSNR = tDuration(0);
   tDuration DurationWSPSNR = tDuration(0);
   tDuration DurationIVPSNR = tDuration(0);
-  tDuration DurationFlowCalc = tDuration(0);
   tDuration DurationCalcFlow = tDuration(0);
   tDuration DurationIVPSNRFlowCheck = tDuration(0);
   tDuration DurationPSNRFlow = tDuration(0);
@@ -658,15 +657,30 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
         #endif
 
         if (f == 0) {
+            #if RLOF == true
+            prev[0] = cv::Mat(PictureHeight, PictureWidth, CV_8UC3);
+            prev[1] = cv::Mat(PictureHeight, PictureWidth, CV_8UC3);
 
-            prev[0] = cv::Mat(PictureHeight, PictureWidth, CV_16UC1);
-            prev[1] = cv::Mat(PictureHeight, PictureWidth, CV_16UC1);
+            next[0] = cv::Mat(PictureHeight, PictureWidth, CV_8UC3);
+            next[1] = cv::Mat(PictureHeight, PictureWidth, CV_8UC3);
 
-            next[0] = cv::Mat(PictureHeight, PictureWidth, CV_16UC1);
-            next[1] = cv::Mat(PictureHeight, PictureWidth, CV_16UC1);
+            xUtilsOCV::xPic2Mat(PictureP[0], prev[0], 3);
+            xUtilsOCV::xPic2Mat(PictureP[1], prev[1], 3);
+
+            #endif
+
+            #if RLOF == false
+            prev[0] = cv::Mat(PictureHeight, PictureWidth, CV_8UC1);
+            prev[1] = cv::Mat(PictureHeight, PictureWidth, CV_8UC1);
+
+            next[0] = cv::Mat(PictureHeight, PictureWidth, CV_8UC1);
+            next[1] = cv::Mat(PictureHeight, PictureWidth, CV_8UC1);
 
             xUtilsOCV::xPic2Mat(PictureP[0], prev[0], 1);
             xUtilsOCV::xPic2Mat(PictureP[1], prev[1], 1);
+
+            #endif
+            
             FrameIVPSNRFlowCheck[f] = 0.0;
             FramePSNRFlow[f] = 0.0;
             FrameIVPSNRFlow[f] = 0.0;
@@ -677,22 +691,26 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             cv::Mat flow[2];
             if (ThreadPoolIf.isActive())
             {
+                #if RLOF == true
                 for (int32 i = 0; i < 2; i++) {
-                    ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, /*&pyr_scale, &levels, &winsize, &iterations, &poly_n, &poly_sigma,*/ i](int32 /*ThreadIdx*/) {
-                        
-                        #if RLOF == true
+                    ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, i](int32 /*ThreadIdx*/) {
                         //********************************
                         //******RLOF IMPLEMENTATION*******
                         //********************************
+
                         xUtilsOCV::xPic2Mat(PictureP[i], next[i], 3);
                         flow[i] = (prev[i].size(), CV_32FC2);
                         cv::optflow::calcOpticalFlowDenseRLOF(prev[i], next[i], flow[i]);
                         xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
                         flowPlane[i].extend();
+                        });
+                }
+                #endif
 
-                        #endif
-
-                        #if RLOF == false
+                #if RLOF == false
+                for (int32 i = 0; i < 2; i++) {
+                    ThreadPoolIf.addWaitingTask([&prev, &next, &flow, &PictureP, &flowPlane, 
+                        &pyr_scale, &levels, &winsize, &iterations, &poly_n, &poly_sigma, i](int32 /*ThreadIdx*/) {
                         //********************************
                         //****FARNEBACK IMPLEMENTATION****
                         //********************************
@@ -701,11 +719,12 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
                         flow[i] = (prev[i].size(), CV_32FC2);
                         cv::calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
                         xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
-                        flowPlane[i].extend();
+                        //flowPlane[i].extend();
                         
-                        #endif
                         });
                 }
+                #endif
+
                 ThreadPoolIf.waitUntilTasksFinished(2);
             }
             else
@@ -733,7 +752,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
                     flow[i] = (prev[i].size(), CV_32FC2);
                     cv::calcOpticalFlowFarneback(prev[i], next[i], flow[i], pyr_scale, levels, winsize, iterations, poly_n, poly_sigma, 0);
                     xUtilsOCV::Mat2xPlane(flow[i], flowPlane[i]);
-                    flowPlane[i].extend();
+                    //flowPlane[i].extend();
 
                     #endif
                 }
@@ -784,6 +803,12 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
             }
 
             T10 = (VerboseLevel >= 3) ? tClock::now() : tTimePoint::min();
+
+            DurationCalcFlow += (T6 - T5);
+            DurationIVPSNRFlowCheck += (T7 - T6);
+            DurationPSNRFlow += (T8 - T7);
+            DurationIVPSNRFlow += (T9 - T8);
+            DurationIVPSNROnlyFlow += (T10 - T9);
         }
     }
 
@@ -792,11 +817,7 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
     Duration__PSNR += (T3 - T2);
     DurationWSPSNR += (T4 - T3);
     DurationIVPSNR += (T5 - T4);
-    DurationCalcFlow += (T6 - T5);
-    DurationIVPSNRFlowCheck += (T7 - T6);
-    DurationPSNRFlow += (T8 - T7);
-    DurationIVPSNRFlow += (T9 - T8);
-    DurationIVPSNROnlyFlow += (T10 - T9);
+    
   }
   
   //==============================================================================
@@ -888,10 +909,10 @@ int32 IVPSNR_MAIN(int argc, char *argv[], char* /*envp*/[])
     if(CalcWSPSNR)                  { fmt::printf("AvgTime         WSPSNR %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationWSPSNR).count() / NumFrames); }
     if(CalcIVPSNR)                  { fmt::printf("AvgTime         IVPSNR %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationIVPSNR).count() / NumFrames); }
     if(CalcCheckFlow || CalcPSNRFlow || CalcIVPSNRFlow || CalcIVPSNRFlowOnly)             
-								    { fmt::printf("AvgTime       CalcFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationFlowCalc).count() / NumFrames); }
-    if(CalcPSNRFlow)              	{ fmt::printf("AvgTime       PSNRFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationFlowCalc).count() / NumFrames); }
-    if(CalcIVPSNRFlow)            	{ fmt::printf("AvgTime     IVPSNRFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationFlowCalc).count() / NumFrames); }
-    if(CalcIVPSNRFlowOnly)        	{ fmt::printf("AvgTime IVPSNRFlowOnly %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationFlowCalc).count() / NumFrames); }
+								    { fmt::printf("AvgTime       CalcFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationCalcFlow).count() / NumFrames); }
+    if(CalcPSNRFlow)              	{ fmt::printf("AvgTime       PSNRFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationPSNRFlow).count() / NumFrames); }
+    if(CalcIVPSNRFlow)            	{ fmt::printf("AvgTime     IVPSNRFlow %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationIVPSNRFlow).count() / NumFrames); }
+    if(CalcIVPSNRFlowOnly)        	{ fmt::printf("AvgTime IVPSNRFlowOnly %9.2f ms\n", std::chrono::duration_cast<tDurationMS>(DurationIVPSNROnlyFlow).count() / NumFrames); }
   }
   fmt::printf("\n");
   fmt::printf("TotalTime %.2f s\n", std::chrono::duration_cast<tDurationS>(ProcessingEnd - ProcessingBeg).count());
