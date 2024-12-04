@@ -55,7 +55,7 @@
 #include "xPlane.h"
 #include <opencv2/optflow/rlofflow.hpp>
 
-#define RLOF false
+#define RLOF true
 
 using namespace PMBB_NAMESPACE;
 

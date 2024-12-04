@@ -68,11 +68,11 @@ template <typename PelType> bool xPlane<PelType>::check(const std::string& Name)
 }
 template <typename PelType> void xPlane<PelType>::extend()
 {
-  if constexpr(std::is_same_v<PelType, uint16>)
+  if constexpr(std::is_same_v<PelType, uint16> || std::is_same_v<PelType, flt32V2>)
   {
-    xPixelOps::ExtendMargin(m_Origin, m_Stride, m_Width, m_Height, m_Margin);
+    xPixelOps::ExtendMargin(m_Origin, m_Stride, m_Width, m_Height, m_Margin); 
   }
-  else
+  else 
   {
     assert(0); 
   }
